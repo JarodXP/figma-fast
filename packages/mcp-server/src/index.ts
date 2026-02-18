@@ -10,6 +10,7 @@ import { registerPingTool } from './tools/ping.js';
 import { registerBuildSceneTool } from './tools/build-scene.js';
 import { registerReadTools } from './tools/read-tools.js';
 import { registerEditTools } from './tools/edit-tools.js';
+import { registerComponentTools } from './tools/component-tools.js';
 
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 
@@ -24,6 +25,7 @@ registerPingTool(server);
 registerBuildSceneTool(server);
 registerReadTools(server);
 registerEditTools(server);
+registerComponentTools(server);
 
 // Start embedded WebSocket server
 startWsServer(WS_PORT);

@@ -401,29 +401,117 @@ type WsMessage =
 ## Phase 5: Component System
 
 **Duration:** 3–4 days
-**Purpose:** Library components, instances, and overrides.
+**Purpose:** Full component creation, variant management, and component properties — enabling design system workflows.
 
-### 5.1 — Component Instantiation
+### 5.1 — Shared Types: Component & ComponentSet
 
-- [ ] **5.1.1** `instantiate_components` — create instances from library components:
+- [ ] **5.1.1** Add `'COMPONENT'` and `'COMPONENT_SET'` to `NodeType` union in `packages/shared/src/scene-spec.ts`
+- [ ] **5.1.2** Add `ComponentPropertyDefinition` interface to `packages/shared/src/scene-spec.ts`:
   ```typescript
-  {
-    instances: [
-      { componentKey: "abc123", x: 0, y: 0, overrides: { "Title": { characters: "Hello" } } },
-      { componentKey: "def456", x: 200, y: 0 }
-    ]
+  interface ComponentPropertyDefinition {
+    name: string;
+    type: 'BOOLEAN' | 'TEXT' | 'INSTANCE_SWAP';
+    defaultValue: string;
+    preferredValues?: string;
   }
   ```
-- [ ] **5.1.2** Support component key lookup: by name, by key, from local or remote libraries
-- [ ] **5.1.3** Override application: text content, fill colors, visibility of nested layers
+- [ ] **5.1.3** Add component-specific fields to `SceneNode` interface:
+  - `componentDescription?: string` — description for COMPONENT/COMPONENT_SET
+  - `componentProperties?: ComponentPropertyDefinition[]` — non-variant properties to add after creation
+- [ ] **5.1.4** Add 3 new message types to `ServerToPluginMessage` in `packages/shared/src/messages.ts`:
+  - `convert_to_component` (nodeId, name?)
+  - `combine_as_variants` (componentIds[], name?)
+  - `manage_component_properties` (nodeId, operations[])
+- [ ] **5.1.5** Add `ComponentPropertyOperation` type and export new types from `packages/shared/src/index.ts`
 
-### 5.2 — Component Creation
+### 5.2 — Plugin: COMPONENT Node Creation
 
-- [ ] **5.2.1** Within `build_scene`: if a subtree is marked `asComponent: true`, create it as a component
-- [ ] **5.2.2** Component set / variant creation support
+- [ ] **5.2.1** Add `COMPONENT` case to `createNode()` in `packages/figma-plugin/src/scene-builder/build-node.ts`:
+  ```typescript
+  case 'COMPONENT':
+    return figma.createComponent();
+  ```
+  ComponentNode inherits all frame property application (fills, strokes, auto-layout, children) via existing duck-typing checks — no changes needed to property helpers.
+- [ ] **5.2.2** After children recursion (step 10 in `buildNode`), add component-specific handling:
+  - Set `componentDescription` if provided
+  - Call `addComponentProperty()` for each entry in `componentProperties`
+
+### 5.3 — Plugin: COMPONENT_SET Creation (Reversed Build Order)
+
+- [ ] **5.3.1** Implement `buildComponentSet()` function in `build-node.ts`:
+  1. Validate: must have children, all children must be `type: COMPONENT`
+  2. Build all child ComponentNodes first (via `buildNode()`, temporarily appended to parent)
+  3. Call `figma.combineAsVariants(childComponents, parent)` to create the ComponentSetNode
+  4. Apply visual properties, `componentDescription`, `componentProperties` to the resulting set
+  5. Record ID mapping
+- [ ] **5.3.2** Add early return in `buildNode()` for COMPONENT_SET:
+  ```typescript
+  if (spec.type === 'COMPONENT_SET') {
+    return buildComponentSet(spec, parent, idMap, failedFonts);
+  }
+  ```
+  > **Key insight:** Variant naming is convention-based. Each child COMPONENT's `name` must follow `"Property=Value, Property=Value"` format (e.g., `"State=Default, Size=Large"`). Figma's `combineAsVariants()` parses these names to create variant properties automatically.
+
+### 5.4 — MCP Server: Update build_scene Schema
+
+- [ ] **5.4.1** Add `'COMPONENT'` and `'COMPONENT_SET'` to the `type` enum in `SceneNodeSchema` Zod definition in `packages/mcp-server/src/tools/build-scene.ts`
+- [ ] **5.4.2** Add `ComponentPropertyDefinitionSchema` Zod object
+- [ ] **5.4.3** Add `componentDescription` and `componentProperties` fields to `SceneNodeSchema`
+- [ ] **5.4.4** Add component examples to `TOOL_DESCRIPTION`:
+  - Example: Button component set with State/Size variants
+  - Example: Standalone reusable Avatar component
+  - Document COMPONENT vs COMPONENT_SET usage and naming conventions
+
+### 5.5 — Serialization: Component-Specific Data
+
+- [ ] **5.5.1** Add component fields to `SerializedNode` in `packages/figma-plugin/src/serialize-node.ts`:
+  - `componentKey`, `componentDescription`, `componentPropertyDefinitions` (for COMPONENT & COMPONENT_SET)
+  - `mainComponentId`, `mainComponentKey` (for INSTANCE nodes)
+- [ ] **5.5.2** Add serialization logic for `node.type === 'COMPONENT'`, `'COMPONENT_SET'`, and `'INSTANCE'`
+- [ ] **5.5.3** Enhance `handleGetLocalComponents()` in `packages/figma-plugin/src/handlers.ts`:
+  - Also find and return component sets via `findAllWithCriteria({ types: ['COMPONENT_SET'] })`
+  - For each component: include parent component set info if inside one
+  - For each component set: include variant count and variant names
+
+### 5.6 — New MCP Tools: Component Lifecycle Operations
+
+Create `packages/mcp-server/src/tools/component-tools.ts` with 3 dedicated tools:
+
+- [ ] **5.6.1** `convert_to_component` — Convert an existing FRAME into a Component:
+  - Uses `figma.createComponentFromNode(node)` on the plugin side
+  - Returns: componentId, componentKey, name
+  - Essential for workflows where user builds UI with build_scene first, then componentizes parts
+- [ ] **5.6.2** `combine_as_variants` — Combine existing Component nodes into a Component Set:
+  - Validates all nodes are COMPONENT type and share same parent
+  - Uses `figma.combineAsVariants(components, parent)` on the plugin side
+  - Returns: componentSetId, componentSetKey, variantCount, variantNames
+- [ ] **5.6.3** `manage_component_properties` — Add/edit/delete non-variant properties on Components or Component Sets:
+  - Supports BOOLEAN, TEXT, INSTANCE_SWAP property types
+  - Uses `addComponentProperty()`, `editComponentProperty()`, `deleteComponentProperty()` on the plugin side
+  - Returns per-operation success/error results
+
+### 5.7 — Wiring: Plugin & Server Integration
+
+- [ ] **5.7.1** Add handler functions in `packages/figma-plugin/src/handlers.ts`:
+  - `handleConvertToComponent(nodeId, name?)`
+  - `handleCombineAsVariants(componentIds[], name?)`
+  - `handleManageComponentProperties(nodeId, operations[])`
+- [ ] **5.7.2** Add message routing for 3 new types in `packages/figma-plugin/src/main.ts`
+- [ ] **5.7.3** Register component tools in `packages/mcp-server/src/index.ts`
+
+### 5.8 — Testing & Validation
+
+- [ ] **5.8.1** Build all packages: `npm run build` — verify clean compilation
+- [ ] **5.8.2** Test `build_scene` with `type: "COMPONENT"` — verify purple component border, correct properties, can be instantiated
+- [ ] **5.8.3** Test `build_scene` with `type: "COMPONENT_SET"` + variant children — verify variant panel, variant properties derived from names
+- [ ] **5.8.4** Test `convert_to_component` on existing frame — verify children preserved, key returned
+- [ ] **5.8.5** Test `combine_as_variants` on standalone components — verify component set created
+- [ ] **5.8.6** Test `manage_component_properties` — add/edit/delete a boolean property
+- [ ] **5.8.7** Test `get_node_info` on components — verify component-specific fields in output
+- [ ] **5.8.8** Test `get_local_components` — verify both components and component sets returned
 
 ### Deliverable for Phase 5
-→ Claude can use design system components, create instances with overrides, and build component-based layouts.
+→ Claude can create components and component sets with variants from scratch via `build_scene`, convert existing frames into components, combine components into variant groups, and manage component properties. Full design system authoring workflow unlocked.
 
 ---
 
@@ -472,15 +560,17 @@ type WsMessage =
 
 | Tool | Tier | Priority | Description |
 |------|------|----------|-------------|
-| `build_scene` | 1 | P0 | Create entire UI from declarative spec |
+| `build_scene` | 1 | P0 | Create entire UI from declarative spec (supports COMPONENT & COMPONENT_SET) |
 | `batch_modify` | 2 | P1 | Modify multiple nodes in one call |
 | `batch_text_replace` | 2 | P1 | Find/replace text across nodes |
-| `instantiate_components` | 1 | P1 | Create component instances with overrides |
+| `convert_to_component` | 1 | P1 | Convert existing frame/node into a Component |
+| `combine_as_variants` | 1 | P1 | Combine Components into a Component Set (variants) |
+| `manage_component_properties` | 1 | P1 | Add/edit/delete component properties (BOOLEAN, TEXT, INSTANCE_SWAP) |
 | `get_document_info` | 4 | P0 | Read document structure |
-| `get_node_info` | 4 | P0 | Read node properties |
+| `get_node_info` | 4 | P0 | Read node properties (incl. component data) |
 | `get_selection` | 4 | P1 | Read current selection |
 | `get_styles` | 4 | P2 | Read local styles |
-| `get_local_components` | 4 | P2 | Read local components |
+| `get_local_components` | 4 | P2 | Read local components & component sets |
 | `export_node_as_image` | 4 | P2 | Export node to image |
 | `modify_node` | 3 | P1 | Edit single node properties |
 | `delete_nodes` | 3 | P1 | Delete nodes |

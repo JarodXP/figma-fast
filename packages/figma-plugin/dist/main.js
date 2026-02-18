@@ -183,6 +183,8 @@
           return figma.createLine();
         case "VECTOR":
           return figma.createVector();
+        case "COMPONENT":
+          return figma.createComponent();
         case "COMPONENT_INSTANCE": {
           if (!spec.componentKey) {
             throw new Error("COMPONENT_INSTANCE requires componentKey");
@@ -388,9 +390,73 @@
       node.layoutSizingVertical = spec.layoutSizingVertical;
     }
   }
+  function buildComponentSet(spec, parent, idMap, failedFonts) {
+    return __async(this, null, function* () {
+      var _a, _b, _c, _d;
+      const errors = [];
+      if (!spec.children || spec.children.length === 0) {
+        errors.push("COMPONENT_SET requires at least one COMPONENT child");
+        const placeholder = figma.createFrame();
+        placeholder.name = `[ERROR] ${(_a = spec.name) != null ? _a : "ComponentSet"}`;
+        placeholder.resize((_b = spec.width) != null ? _b : 100, (_c = spec.height) != null ? _c : 100);
+        parent.appendChild(placeholder);
+        return { node: placeholder, errors };
+      }
+      const componentNodes = [];
+      for (const childSpec of spec.children) {
+        if (childSpec.type !== "COMPONENT") {
+          errors.push(`COMPONENT_SET children must be COMPONENT type, got ${childSpec.type} \u2014 wrapping as COMPONENT`);
+          childSpec.type = "COMPONENT";
+        }
+        const childResult = yield buildNode(childSpec, parent, idMap, failedFonts);
+        errors.push(...childResult.errors);
+        if (childResult.node.type === "COMPONENT") {
+          componentNodes.push(childResult.node);
+        }
+      }
+      if (componentNodes.length === 0) {
+        errors.push("No valid COMPONENT children built for COMPONENT_SET");
+        const placeholder = figma.createFrame();
+        placeholder.name = `[ERROR] ${(_d = spec.name) != null ? _d : "ComponentSet"}`;
+        parent.appendChild(placeholder);
+        return { node: placeholder, errors };
+      }
+      const componentSet = figma.combineAsVariants(componentNodes, parent);
+      if (spec.name) componentSet.name = spec.name;
+      if (spec.componentDescription) componentSet.description = spec.componentDescription;
+      if (spec.width !== void 0 && spec.height !== void 0) {
+        componentSet.resize(spec.width, spec.height);
+      }
+      if (spec.x !== void 0) componentSet.x = spec.x;
+      if (spec.y !== void 0) componentSet.y = spec.y;
+      if (spec.fills && "fills" in componentSet) {
+        applyFills(componentSet, spec.fills, errors);
+      }
+      if (spec.effects && "effects" in componentSet) {
+        applyEffects(componentSet, spec.effects, errors);
+      }
+      if (spec.cornerRadius !== void 0 && "cornerRadius" in componentSet) {
+        applyCornerRadius(componentSet, spec.cornerRadius);
+      }
+      if (spec.opacity !== void 0) componentSet.opacity = spec.opacity;
+      if (spec.clipsContent !== void 0) componentSet.clipsContent = spec.clipsContent;
+      if (spec.visible !== void 0) componentSet.visible = spec.visible;
+      if (spec.locked !== void 0) componentSet.locked = spec.locked;
+      if (spec.layoutMode && spec.layoutMode !== "NONE") {
+        applyAutoLayout(componentSet, spec);
+      }
+      if (spec.id) {
+        idMap[spec.id] = componentSet.id;
+      }
+      return { node: componentSet, errors };
+    });
+  }
   function buildNode(spec, parent, idMap, failedFonts) {
     return __async(this, null, function* () {
       var _a, _b, _c, _d;
+      if (spec.type === "COMPONENT_SET") {
+        return buildComponentSet(spec, parent, idMap, failedFonts);
+      }
       const errors = [];
       let node;
       try {
@@ -405,6 +471,9 @@
         return { node: placeholder, errors };
       }
       if (spec.name) node.name = spec.name;
+      if (spec.componentDescription && node.type === "COMPONENT") {
+        node.description = spec.componentDescription;
+      }
       if (spec.width !== void 0 && spec.height !== void 0) {
         node.resize(spec.width, spec.height);
       } else if (spec.width !== void 0) {
@@ -673,6 +742,33 @@
       if (fontName !== figma.mixed) {
         result.fontFamily = fontName.family;
         result.fontWeight = fontName.style;
+      }
+    }
+    if (node.type === "COMPONENT") {
+      const comp = node;
+      result.componentKey = comp.key;
+      if (comp.description) result.componentDescription = comp.description;
+    }
+    if (node.type === "COMPONENT_SET") {
+      const compSet = node;
+      result.componentKey = compSet.key;
+      if (compSet.description) result.componentDescription = compSet.description;
+      if (compSet.componentPropertyDefinitions) {
+        result.componentPropertyDefinitions = Object.fromEntries(
+          Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [k, {
+            type: v.type,
+            defaultValue: v.defaultValue,
+            variantOptions: v.variantOptions
+          }])
+        );
+      }
+    }
+    if (node.type === "INSTANCE") {
+      const instance = node;
+      const mainComp = instance.mainComponent;
+      if (mainComp) {
+        result.mainComponentId = mainComp.id;
+        result.mainComponentKey = mainComp.key;
       }
     }
     if ("children" in node) {
@@ -1010,6 +1106,157 @@
       };
     });
   }
+  function handleConvertToComponent(nodeId) {
+    return __async(this, null, function* () {
+      const node = yield figma.getNodeByIdAsync(nodeId);
+      if (!node) {
+        throw new Error(`Node not found: ${nodeId}`);
+      }
+      if (node.type !== "FRAME" && node.type !== "GROUP" && node.type !== "RECTANGLE" && node.type !== "COMPONENT") {
+        throw new Error(`Cannot convert ${node.type} to component. Must be a FRAME, GROUP, or RECTANGLE.`);
+      }
+      if (node.type === "COMPONENT") {
+        const comp = node;
+        return {
+          componentId: comp.id,
+          componentKey: comp.key,
+          name: comp.name
+        };
+      }
+      const component = figma.createComponent();
+      component.name = node.name;
+      const sceneNode = node;
+      component.resize(sceneNode.width, sceneNode.height);
+      component.x = sceneNode.x;
+      component.y = sceneNode.y;
+      if ("fills" in node) {
+        const fills = node.fills;
+        if (fills !== figma.mixed) component.fills = fills;
+      }
+      if ("strokes" in node) {
+        component.strokes = node.strokes;
+      }
+      if ("effects" in node) {
+        component.effects = node.effects;
+      }
+      if ("cornerRadius" in node) {
+        const cr = node.cornerRadius;
+        if (cr !== figma.mixed) component.cornerRadius = cr;
+      }
+      if ("opacity" in node) {
+        component.opacity = node.opacity;
+      }
+      if ("clipsContent" in node) {
+        component.clipsContent = node.clipsContent;
+      }
+      if ("layoutMode" in node) {
+        const frame = node;
+        if (frame.layoutMode !== "NONE") {
+          component.layoutMode = frame.layoutMode;
+          component.paddingTop = frame.paddingTop;
+          component.paddingRight = frame.paddingRight;
+          component.paddingBottom = frame.paddingBottom;
+          component.paddingLeft = frame.paddingLeft;
+          component.itemSpacing = frame.itemSpacing;
+          component.primaryAxisAlignItems = frame.primaryAxisAlignItems;
+          component.counterAxisAlignItems = frame.counterAxisAlignItems;
+        }
+      }
+      if ("children" in node) {
+        const parent = node;
+        while (parent.children.length > 0) {
+          component.appendChild(parent.children[0]);
+        }
+      }
+      if (node.parent && "children" in node.parent) {
+        const parentNode = node.parent;
+        const index = parentNode.children.indexOf(sceneNode);
+        parentNode.insertChild(index >= 0 ? index : parentNode.children.length, component);
+      }
+      node.remove();
+      return {
+        componentId: component.id,
+        componentKey: component.key,
+        name: component.name
+      };
+    });
+  }
+  function handleCombineAsVariants(nodeIds, name) {
+    return __async(this, null, function* () {
+      const components = [];
+      for (const nodeId of nodeIds) {
+        const node = yield figma.getNodeByIdAsync(nodeId);
+        if (!node) {
+          throw new Error(`Node not found: ${nodeId}`);
+        }
+        if (node.type !== "COMPONENT") {
+          throw new Error(`Node ${nodeId} is ${node.type}, not a COMPONENT. Convert it to a component first.`);
+        }
+        components.push(node);
+      }
+      const parent = components[0].parent;
+      if (!parent || !("children" in parent)) {
+        throw new Error("Components must have a valid parent");
+      }
+      const componentSet = figma.combineAsVariants(components, parent);
+      if (name) {
+        componentSet.name = name;
+      }
+      return {
+        componentSetId: componentSet.id,
+        componentSetKey: componentSet.key,
+        name: componentSet.name,
+        variantCount: componentSet.children.length
+      };
+    });
+  }
+  function handleManageComponentProperties(componentId, action, properties) {
+    return __async(this, null, function* () {
+      const node = yield figma.getNodeByIdAsync(componentId);
+      if (!node) {
+        throw new Error(`Node not found: ${componentId}`);
+      }
+      if (node.type !== "COMPONENT" && node.type !== "COMPONENT_SET") {
+        throw new Error(`Node ${componentId} is ${node.type}, must be COMPONENT or COMPONENT_SET`);
+      }
+      const comp = node;
+      let modified = 0;
+      for (const prop of properties) {
+        try {
+          if (action === "add") {
+            comp.addComponentProperty(prop.name, prop.type, prop.defaultValue);
+            modified++;
+          } else if (action === "delete") {
+            const defs = comp.componentPropertyDefinitions;
+            for (const [key, def] of Object.entries(defs)) {
+              if (def.type === prop.type && key.startsWith(prop.name)) {
+                comp.deleteComponentProperty(key);
+                modified++;
+                break;
+              }
+            }
+          } else if (action === "update") {
+            const defs = comp.componentPropertyDefinitions;
+            for (const [key, def] of Object.entries(defs)) {
+              if (key.startsWith(prop.name) && def.type === prop.type) {
+                comp.editComponentProperty(key, { defaultValue: prop.defaultValue });
+                modified++;
+                break;
+              }
+            }
+          }
+        } catch (err) {
+          throw new Error(`Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      return {
+        componentId: comp.id,
+        name: comp.name,
+        action,
+        propertiesModified: modified
+      };
+    });
+  }
   function getFontStyleFromWeight(weight) {
     switch (weight) {
       case 100:
@@ -1100,6 +1347,20 @@
         break;
       case "clone_node":
         handleCloneNode(msg.nodeId).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Component Tools ──────────────────────────────────────
+      case "convert_to_component":
+        handleConvertToComponent(msg.nodeId).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "combine_as_variants":
+        handleCombineAsVariants(msg.nodeIds, msg.name).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "manage_component_properties":
+        handleManageComponentProperties(
+          msg.componentId,
+          msg.action,
+          msg.properties
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       default:
         console.log(`[FigmaFast] Unknown message type: ${msg.type}`);

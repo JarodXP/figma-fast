@@ -16,6 +16,9 @@ import {
   handleDeleteNodes,
   handleMoveNode,
   handleCloneNode,
+  handleConvertToComponent,
+  handleCombineAsVariants,
+  handleManageComponentProperties,
 } from './handlers.js';
 
 // Show plugin UI
@@ -122,6 +125,30 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
 
     case 'clone_node':
       handleCloneNode(msg.nodeId as string)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Component Tools ──────────────────────────────────────
+
+    case 'convert_to_component':
+      handleConvertToComponent(msg.nodeId as string)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'combine_as_variants':
+      handleCombineAsVariants(msg.nodeIds as string[], msg.name as string | undefined)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'manage_component_properties':
+      handleManageComponentProperties(
+        msg.componentId as string,
+        msg.action as 'add' | 'update' | 'delete',
+        msg.properties as Array<{ name: string; type: string; defaultValue: string | boolean; variantOptions?: string[] }>,
+      )
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

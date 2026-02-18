@@ -2,7 +2,7 @@
  * Declarative scene specification types for FigmaFast.
  * SceneNode is THE core type — everything revolves around this.
  */
-export type NodeType = 'FRAME' | 'TEXT' | 'RECTANGLE' | 'ELLIPSE' | 'GROUP' | 'COMPONENT_INSTANCE' | 'POLYGON' | 'STAR' | 'LINE' | 'VECTOR';
+export type NodeType = 'FRAME' | 'TEXT' | 'RECTANGLE' | 'ELLIPSE' | 'GROUP' | 'COMPONENT' | 'COMPONENT_SET' | 'COMPONENT_INSTANCE' | 'POLYGON' | 'STAR' | 'LINE' | 'VECTOR';
 export type FillType = 'SOLID' | 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND' | 'IMAGE';
 export interface GradientStop {
     position: number;
@@ -89,6 +89,7 @@ export interface SceneNode {
     textCase?: TextCase;
     componentKey?: string;
     overrides?: Record<string, Partial<SceneNode>>;
+    componentDescription?: string;
     children?: SceneNode[];
     visible?: boolean;
     locked?: boolean;

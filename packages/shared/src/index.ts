@@ -21,6 +21,7 @@ export type {
 } from './scene-spec.js';
 
 export type {
+  ComponentPropertyDefinition,
   Modification,
   ServerToPluginMessage,
   PluginToServerMessage,

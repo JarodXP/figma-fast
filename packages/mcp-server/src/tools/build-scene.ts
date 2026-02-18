@@ -53,7 +53,7 @@ const LineHeightSchema = z.object({
 const SceneNodeSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
     id: z.string().optional().describe('Client-assigned ID for referencing this node later'),
-    type: z.enum(['FRAME', 'TEXT', 'RECTANGLE', 'ELLIPSE', 'GROUP', 'COMPONENT_INSTANCE', 'POLYGON', 'STAR', 'LINE', 'VECTOR']),
+    type: z.enum(['FRAME', 'TEXT', 'RECTANGLE', 'ELLIPSE', 'GROUP', 'COMPONENT', 'COMPONENT_SET', 'COMPONENT_INSTANCE', 'POLYGON', 'STAR', 'LINE', 'VECTOR']),
     name: z.string().optional(),
 
     // Geometry
@@ -98,6 +98,9 @@ const SceneNodeSchema: z.ZodType<any> = z.lazy(() =>
     // Component instance
     componentKey: z.string().optional(),
     overrides: z.record(z.any()).optional(),
+
+    // Component / Component Set
+    componentDescription: z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
 
     // Children
     children: z.array(z.lazy(() => SceneNodeSchema)).optional(),
@@ -174,6 +177,39 @@ Example 3 — Button:
     "layoutSizingHorizontal": "HUG", "layoutSizingVertical": "HUG",
     "children": [
       {"type": "TEXT", "characters": "Get Started", "fontSize": 14, "fontWeight": 600, "fills": [{"type": "SOLID", "color": "#FFFFFF"}]}
+    ]
+  }
+}
+
+COMPONENTS: Use type "COMPONENT" to create reusable components (same properties as FRAME). Use type "COMPONENT_SET" to create variant groups — its children MUST all be type "COMPONENT" with variant names like "Property1=Value1, Property2=Value2".
+
+Example 4 — Button component with variants:
+{
+  "scene": {
+    "type": "COMPONENT_SET",
+    "name": "Button",
+    "componentDescription": "Primary action button",
+    "children": [
+      {
+        "type": "COMPONENT", "name": "Size=Medium, State=Default",
+        "layoutMode": "HORIZONTAL", "padding": [10, 20, 10, 20],
+        "primaryAxisAlignItems": "CENTER", "counterAxisAlignItems": "CENTER",
+        "fills": [{"type": "SOLID", "color": "#2563EB"}], "cornerRadius": 8,
+        "layoutSizingHorizontal": "HUG", "layoutSizingVertical": "HUG",
+        "children": [
+          {"type": "TEXT", "characters": "Button", "fontSize": 14, "fontWeight": 600, "fills": [{"type": "SOLID", "color": "#FFFFFF"}]}
+        ]
+      },
+      {
+        "type": "COMPONENT", "name": "Size=Medium, State=Hover",
+        "layoutMode": "HORIZONTAL", "padding": [10, 20, 10, 20],
+        "primaryAxisAlignItems": "CENTER", "counterAxisAlignItems": "CENTER",
+        "fills": [{"type": "SOLID", "color": "#1D4ED8"}], "cornerRadius": 8,
+        "layoutSizingHorizontal": "HUG", "layoutSizingVertical": "HUG",
+        "children": [
+          {"type": "TEXT", "characters": "Button", "fontSize": 14, "fontWeight": 600, "fills": [{"type": "SOLID", "color": "#FFFFFF"}]}
+        ]
+      }
     ]
   }
 }`;

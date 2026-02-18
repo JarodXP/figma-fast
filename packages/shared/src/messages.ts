@@ -11,6 +11,14 @@ export interface Modification {
   properties: Partial<SceneNode>;
 }
 
+/** Component property definition for manage_component_properties */
+export interface ComponentPropertyDefinition {
+  name: string;
+  type: 'BOOLEAN' | 'TEXT' | 'INSTANCE_SWAP' | 'VARIANT';
+  defaultValue: string | boolean;
+  variantOptions?: string[];
+}
+
 /** Messages sent from MCP server to Figma plugin */
 export type ServerToPluginMessage =
   | { type: 'ping'; id: string }
@@ -26,7 +34,10 @@ export type ServerToPluginMessage =
   | { type: 'modify_node'; id: string; nodeId: string; properties: Partial<SceneNode> }
   | { type: 'delete_nodes'; id: string; nodeIds: string[] }
   | { type: 'move_node'; id: string; nodeId: string; x?: number; y?: number; parentId?: string; index?: number }
-  | { type: 'clone_node'; id: string; nodeId: string };
+  | { type: 'clone_node'; id: string; nodeId: string }
+  | { type: 'convert_to_component'; id: string; nodeId: string }
+  | { type: 'combine_as_variants'; id: string; nodeIds: string[]; name?: string }
+  | { type: 'manage_component_properties'; id: string; componentId: string; action: 'add' | 'update' | 'delete'; properties: ComponentPropertyDefinition[] };
 
 /** Messages sent from Figma plugin to MCP server */
 export type PluginToServerMessage =

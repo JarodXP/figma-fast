@@ -36,6 +36,8 @@ async function createNode(spec: SceneSpec): Promise<SceneNode> {
       return figma.createLine();
     case 'VECTOR':
       return figma.createVector();
+    case 'COMPONENT':
+      return figma.createComponent();
     case 'COMPONENT_INSTANCE': {
       if (!spec.componentKey) {
         throw new Error('COMPONENT_INSTANCE requires componentKey');
@@ -276,6 +278,85 @@ export function applySizing(node: SceneNode, spec: SceneSpec): void {
   }
 }
 
+// ─── Component Set Builder (reversed build order) ─────────────
+
+async function buildComponentSet(
+  spec: SceneSpec,
+  parent: BaseNode & ChildrenMixin,
+  idMap: IdMap,
+  failedFonts: Set<string>,
+): Promise<BuildResult> {
+  const errors: string[] = [];
+
+  if (!spec.children || spec.children.length === 0) {
+    errors.push('COMPONENT_SET requires at least one COMPONENT child');
+    const placeholder = figma.createFrame();
+    placeholder.name = `[ERROR] ${spec.name ?? 'ComponentSet'}`;
+    placeholder.resize(spec.width ?? 100, spec.height ?? 100);
+    parent.appendChild(placeholder);
+    return { node: placeholder, errors };
+  }
+
+  // 1. Build all COMPONENT children onto the parent first
+  const componentNodes: ComponentNode[] = [];
+  for (const childSpec of spec.children) {
+    if (childSpec.type !== 'COMPONENT') {
+      errors.push(`COMPONENT_SET children must be COMPONENT type, got ${childSpec.type} — wrapping as COMPONENT`);
+      childSpec.type = 'COMPONENT';
+    }
+    const childResult = await buildNode(childSpec, parent, idMap, failedFonts);
+    errors.push(...childResult.errors);
+    if (childResult.node.type === 'COMPONENT') {
+      componentNodes.push(childResult.node as ComponentNode);
+    }
+  }
+
+  if (componentNodes.length === 0) {
+    errors.push('No valid COMPONENT children built for COMPONENT_SET');
+    const placeholder = figma.createFrame();
+    placeholder.name = `[ERROR] ${spec.name ?? 'ComponentSet'}`;
+    parent.appendChild(placeholder);
+    return { node: placeholder, errors };
+  }
+
+  // 2. Combine as variants — this creates the ComponentSetNode
+  const componentSet = figma.combineAsVariants(componentNodes, parent);
+
+  // 3. Apply properties to the resulting component set
+  if (spec.name) componentSet.name = spec.name;
+  if (spec.componentDescription) componentSet.description = spec.componentDescription;
+
+  if (spec.width !== undefined && spec.height !== undefined) {
+    componentSet.resize(spec.width, spec.height);
+  }
+  if (spec.x !== undefined) componentSet.x = spec.x;
+  if (spec.y !== undefined) componentSet.y = spec.y;
+
+  if (spec.fills && 'fills' in componentSet) {
+    applyFills(componentSet as GeometryMixin, spec.fills, errors);
+  }
+  if (spec.effects && 'effects' in componentSet) {
+    applyEffects(componentSet as BlendMixin, spec.effects, errors);
+  }
+  if (spec.cornerRadius !== undefined && 'cornerRadius' in componentSet) {
+    applyCornerRadius(componentSet as CornerMixin, spec.cornerRadius);
+  }
+  if (spec.opacity !== undefined) componentSet.opacity = spec.opacity;
+  if (spec.clipsContent !== undefined) componentSet.clipsContent = spec.clipsContent;
+  if (spec.visible !== undefined) componentSet.visible = spec.visible;
+  if (spec.locked !== undefined) componentSet.locked = spec.locked;
+
+  if (spec.layoutMode && spec.layoutMode !== 'NONE') {
+    applyAutoLayout(componentSet as unknown as FrameNode, spec);
+  }
+
+  if (spec.id) {
+    idMap[spec.id] = componentSet.id;
+  }
+
+  return { node: componentSet, errors };
+}
+
 // ─── Recursive Node Builder ────────────────────────────────────
 
 export async function buildNode(
@@ -284,6 +365,11 @@ export async function buildNode(
   idMap: IdMap,
   failedFonts: Set<string>,
 ): Promise<BuildResult> {
+  // COMPONENT_SET uses reversed build order — delegate entirely
+  if (spec.type === 'COMPONENT_SET') {
+    return buildComponentSet(spec, parent, idMap, failedFonts);
+  }
+
   const errors: string[] = [];
   let node: SceneNode;
 
@@ -301,8 +387,11 @@ export async function buildNode(
     return { node: placeholder, errors };
   }
 
-  // 2. NAME
+  // 2. NAME & DESCRIPTION
   if (spec.name) node.name = spec.name;
+  if (spec.componentDescription && node.type === 'COMPONENT') {
+    (node as ComponentNode).description = spec.componentDescription;
+  }
 
   // 3. GEOMETRY — use resize(), not direct assignment
   if (spec.width !== undefined && spec.height !== undefined) {

@@ -388,6 +388,186 @@ export async function handleCloneNode(nodeId: string): Promise<unknown> {
   };
 }
 
+// ─── Component Handlers ─────────────────────────────────────────
+
+export async function handleConvertToComponent(nodeId: string): Promise<unknown> {
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    throw new Error(`Node not found: ${nodeId}`);
+  }
+
+  if (node.type !== 'FRAME' && node.type !== 'GROUP' && node.type !== 'RECTANGLE' && node.type !== 'COMPONENT') {
+    throw new Error(`Cannot convert ${node.type} to component. Must be a FRAME, GROUP, or RECTANGLE.`);
+  }
+
+  // If already a component, return it as-is
+  if (node.type === 'COMPONENT') {
+    const comp = node as ComponentNode;
+    return {
+      componentId: comp.id,
+      componentKey: comp.key,
+      name: comp.name,
+    };
+  }
+
+  const component = figma.createComponent();
+  component.name = node.name;
+
+  // Copy size
+  const sceneNode = node as SceneNode;
+  component.resize(sceneNode.width, sceneNode.height);
+  component.x = sceneNode.x;
+  component.y = sceneNode.y;
+
+  // Copy fills, strokes, effects if available
+  if ('fills' in node) {
+    const fills = (node as GeometryMixin).fills;
+    if (fills !== figma.mixed) component.fills = fills;
+  }
+  if ('strokes' in node) {
+    component.strokes = (node as GeometryMixin).strokes;
+  }
+  if ('effects' in node) {
+    component.effects = (node as BlendMixin).effects;
+  }
+  if ('cornerRadius' in node) {
+    const cr = (node as CornerMixin).cornerRadius;
+    if (cr !== figma.mixed) component.cornerRadius = cr;
+  }
+  if ('opacity' in node) {
+    component.opacity = (node as BlendMixin).opacity;
+  }
+  if ('clipsContent' in node) {
+    component.clipsContent = (node as FrameNode).clipsContent;
+  }
+
+  // Copy auto-layout
+  if ('layoutMode' in node) {
+    const frame = node as FrameNode;
+    if (frame.layoutMode !== 'NONE') {
+      component.layoutMode = frame.layoutMode;
+      component.paddingTop = frame.paddingTop;
+      component.paddingRight = frame.paddingRight;
+      component.paddingBottom = frame.paddingBottom;
+      component.paddingLeft = frame.paddingLeft;
+      component.itemSpacing = frame.itemSpacing;
+      component.primaryAxisAlignItems = frame.primaryAxisAlignItems;
+      component.counterAxisAlignItems = frame.counterAxisAlignItems;
+    }
+  }
+
+  // Move children
+  if ('children' in node) {
+    const parent = node as BaseNode & ChildrenMixin;
+    while (parent.children.length > 0) {
+      component.appendChild(parent.children[0]);
+    }
+  }
+
+  // Insert component where the original was
+  if (node.parent && 'children' in node.parent) {
+    const parentNode = node.parent as BaseNode & ChildrenMixin;
+    const index = parentNode.children.indexOf(sceneNode);
+    parentNode.insertChild(index >= 0 ? index : parentNode.children.length, component);
+  }
+
+  // Remove original
+  node.remove();
+
+  return {
+    componentId: component.id,
+    componentKey: component.key,
+    name: component.name,
+  };
+}
+
+export async function handleCombineAsVariants(nodeIds: string[], name?: string): Promise<unknown> {
+  const components: ComponentNode[] = [];
+  for (const nodeId of nodeIds) {
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (!node) {
+      throw new Error(`Node not found: ${nodeId}`);
+    }
+    if (node.type !== 'COMPONENT') {
+      throw new Error(`Node ${nodeId} is ${node.type}, not a COMPONENT. Convert it to a component first.`);
+    }
+    components.push(node as ComponentNode);
+  }
+
+  // All components must share a parent
+  const parent = components[0].parent;
+  if (!parent || !('children' in parent)) {
+    throw new Error('Components must have a valid parent');
+  }
+
+  const componentSet = figma.combineAsVariants(components, parent as BaseNode & ChildrenMixin);
+  if (name) {
+    componentSet.name = name;
+  }
+
+  return {
+    componentSetId: componentSet.id,
+    componentSetKey: componentSet.key,
+    name: componentSet.name,
+    variantCount: componentSet.children.length,
+  };
+}
+
+export async function handleManageComponentProperties(
+  componentId: string,
+  action: 'add' | 'update' | 'delete',
+  properties: Array<{ name: string; type: string; defaultValue: string | boolean; variantOptions?: string[] }>,
+): Promise<unknown> {
+  const node = await figma.getNodeByIdAsync(componentId);
+  if (!node) {
+    throw new Error(`Node not found: ${componentId}`);
+  }
+  if (node.type !== 'COMPONENT' && node.type !== 'COMPONENT_SET') {
+    throw new Error(`Node ${componentId} is ${node.type}, must be COMPONENT or COMPONENT_SET`);
+  }
+
+  const comp = node as ComponentNode | ComponentSetNode;
+  let modified = 0;
+
+  for (const prop of properties) {
+    try {
+      if (action === 'add') {
+        comp.addComponentProperty(prop.name, prop.type as ComponentPropertyType, prop.defaultValue);
+        modified++;
+      } else if (action === 'delete') {
+        // Find the property key by name
+        const defs = comp.componentPropertyDefinitions;
+        for (const [key, def] of Object.entries(defs)) {
+          if (def.type === prop.type && key.startsWith(prop.name)) {
+            comp.deleteComponentProperty(key);
+            modified++;
+            break;
+          }
+        }
+      } else if (action === 'update') {
+        // Find the property key by name and update
+        const defs = comp.componentPropertyDefinitions;
+        for (const [key, def] of Object.entries(defs)) {
+          if (key.startsWith(prop.name) && def.type === prop.type) {
+            comp.editComponentProperty(key, { defaultValue: prop.defaultValue });
+            modified++;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      throw new Error(`Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return {
+    componentId: comp.id,
+    name: comp.name,
+    action,
+    propertiesModified: modified,
+  };
+}
+
 // ─── Helper ────────────────────────────────────────────────────
 
 function getFontStyleFromWeight(weight: number): string {

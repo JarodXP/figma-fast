@@ -1,1 +1,1 @@
-{"root":["./src/index.ts","./src/tools/build-scene.ts","./src/tools/edit-tools.ts","./src/tools/ping.ts","./src/tools/read-tools.ts","./src/ws/server.ts"],"version":"5.9.3"}
+{"root":["./src/index.ts","./src/tools/build-scene.ts","./src/tools/component-tools.ts","./src/tools/edit-tools.ts","./src/tools/ping.ts","./src/tools/read-tools.ts","./src/ws/server.ts"],"version":"5.9.3"}

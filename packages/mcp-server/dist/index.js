@@ -11,6 +11,7 @@ const ping_js_1 = require("./tools/ping.js");
 const build_scene_js_1 = require("./tools/build-scene.js");
 const read_tools_js_1 = require("./tools/read-tools.js");
 const edit_tools_js_1 = require("./tools/edit-tools.js");
+const component_tools_js_1 = require("./tools/component-tools.js");
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 // Create MCP server
 const server = new mcp_js_1.McpServer({
@@ -22,6 +23,7 @@ const server = new mcp_js_1.McpServer({
 (0, build_scene_js_1.registerBuildSceneTool)(server);
 (0, read_tools_js_1.registerReadTools)(server);
 (0, edit_tools_js_1.registerEditTools)(server);
+(0, component_tools_js_1.registerComponentTools)(server);
 // Start embedded WebSocket server
 (0, server_js_1.startWsServer)(WS_PORT);
 // Connect via stdio transport

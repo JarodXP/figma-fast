@@ -40,6 +40,12 @@ export interface SerializedNode {
   textAlignHorizontal?: string;
   textAlignVertical?: string;
   textAutoResize?: string;
+  // Component
+  componentKey?: string;
+  componentDescription?: string;
+  componentPropertyDefinitions?: Record<string, unknown>;
+  mainComponentId?: string;
+  mainComponentKey?: string;
   // Children
   children?: SerializedNode[];
 }
@@ -208,6 +214,35 @@ export function serializeNode(node: BaseNode, depth: number): SerializedNode {
     if (fontName !== figma.mixed) {
       result.fontFamily = fontName.family;
       result.fontWeight = fontName.style;
+    }
+  }
+
+  // Component properties
+  if (node.type === 'COMPONENT') {
+    const comp = node as ComponentNode;
+    result.componentKey = comp.key;
+    if (comp.description) result.componentDescription = comp.description;
+  }
+  if (node.type === 'COMPONENT_SET') {
+    const compSet = node as ComponentSetNode;
+    result.componentKey = compSet.key;
+    if (compSet.description) result.componentDescription = compSet.description;
+    if (compSet.componentPropertyDefinitions) {
+      result.componentPropertyDefinitions = Object.fromEntries(
+        Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [k, {
+          type: v.type,
+          defaultValue: v.defaultValue,
+          variantOptions: v.variantOptions,
+        }])
+      );
+    }
+  }
+  if (node.type === 'INSTANCE') {
+    const instance = node as InstanceNode;
+    const mainComp = instance.mainComponent;
+    if (mainComp) {
+      result.mainComponentId = mainComp.id;
+      result.mainComponentKey = mainComp.key;
     }
   }
 

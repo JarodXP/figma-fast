@@ -9,6 +9,8 @@ export type NodeType =
   | 'RECTANGLE'
   | 'ELLIPSE'
   | 'GROUP'
+  | 'COMPONENT'
+  | 'COMPONENT_SET'
   | 'COMPONENT_INSTANCE'
   | 'POLYGON'
   | 'STAR'
@@ -129,6 +131,9 @@ export interface SceneNode {
   // Component instance
   componentKey?: string;
   overrides?: Record<string, Partial<SceneNode>>;
+
+  // Component / Component Set
+  componentDescription?: string;
 
   // Children
   children?: SceneNode[];
