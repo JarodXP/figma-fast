@@ -449,13 +449,13 @@ Created `packages/mcp-server/src/tools/component-tools.ts` with 3 dedicated tool
 - [x] **5.6.1** `convert_to_component` — Convert existing FRAME/GROUP into a Component. Copies all properties and children, returns componentId/key/name.
 - [x] **5.6.2** `combine_as_variants` — Combine existing Component nodes into a Component Set. Validates all nodes are COMPONENT type.
 - [x] **5.6.3** `manage_component_properties` — Add/update/delete properties on Components or Component Sets. Supports BOOLEAN, TEXT, INSTANCE_SWAP, VARIANT types.
-- [x] **5.6.4** `get_library_components` — Search team library components by libraryName and/or query. Returns name, key, libraryName, description for use with componentKey.
+- [x] **5.6.4** `get_library_components` — Search published components in a library file via Figma REST API (requires `FIGMA_API_TOKEN` env var and `fileKey` param). Returns name, key, description for use with componentKey. Runs server-side — no plugin round-trip needed.
 
 ### 5.7 — Wiring: Plugin & Server Integration
 
-- [x] **5.7.1** Add handler functions in `handlers.ts`: `handleConvertToComponent`, `handleCombineAsVariants`, `handleManageComponentProperties`, `handleGetLibraryComponents`
-- [x] **5.7.2** Add message routing for 4 new types in `main.ts`
-- [x] **5.7.3** Register component tools and library search tool in MCP server `index.ts` and `read-tools.ts`
+- [x] **5.7.1** Add handler functions in `handlers.ts`: `handleConvertToComponent`, `handleCombineAsVariants`, `handleManageComponentProperties`
+- [x] **5.7.2** Add message routing for 3 new component types in `main.ts`
+- [x] **5.7.3** Register component tools in `index.ts`, library search tool in `read-tools.ts` (server-side REST API, not routed through plugin)
 
 ### 5.8 — Testing & Validation
 
@@ -466,7 +466,7 @@ Created `packages/mcp-server/src/tools/component-tools.ts` with 3 dedicated tool
 - [ ] **5.8.5** Test `combine_as_variants` on standalone components — verify component set created
 - [ ] **5.8.6** Test `manage_component_properties` — add/edit/delete a boolean property
 - [ ] **5.8.7** Test `get_node_info` on components — verify component-specific fields in output
-- [ ] **5.8.8** Test `get_library_components` — verify library search returns keys usable with componentKey
+- [ ] **5.8.8** Test `get_library_components` — verify REST API search returns keys usable with componentKey (requires FIGMA_API_TOKEN)
 - [ ] **5.8.9** Test `build_scene` with `COMPONENT_INSTANCE` + `componentId` — verify local component instantiation
 - [ ] **5.8.10** Test `COMPONENT_INSTANCE` with `overrides` — verify property overrides applied via setProperties()
 
@@ -531,7 +531,7 @@ Created `packages/mcp-server/src/tools/component-tools.ts` with 3 dedicated tool
 | `get_selection` | 4 | P1 | Read current selection |
 | `get_styles` | 4 | P2 | Read local styles |
 | `get_local_components` | 4 | P2 | Read local components & component sets |
-| `get_library_components` | 4 | P1 | Search team library components by name/library |
+| `get_library_components` | 4 | P1 | Search published components via Figma REST API (requires FIGMA_API_TOKEN) |
 | `export_node_as_image` | 4 | P2 | Export node to image |
 | `modify_node` | 3 | P1 | Edit single node properties |
 | `delete_nodes` | 3 | P1 | Delete nodes |
@@ -575,4 +575,4 @@ Current task: [UPDATE THIS]
 
 ---
 
-*Last updated: Phase 5 — implementation complete, functional testing pending. Component & Component Set support added to build_scene. 3 new lifecycle tools (convert_to_component, combine_as_variants, manage_component_properties) + get_library_components for team library discovery. Local component instances via componentId + property overrides via setProperties(). All packages build cleanly.*
+*Last updated: Phase 5 — implementation complete, functional testing pending. Component & Component Set support added to build_scene. 3 new lifecycle tools (convert_to_component, combine_as_variants, manage_component_properties). get_library_components searches via Figma REST API (Plugin API lacks component search). Local component instances via componentId + property overrides via setProperties(). All packages build cleanly.*

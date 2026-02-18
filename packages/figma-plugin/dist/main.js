@@ -943,29 +943,6 @@
       };
     });
   }
-  function handleGetLibraryComponents(libraryName, query) {
-    return __async(this, null, function* () {
-      const libComponents = yield figma.teamLibrary.getAvailableComponentsAsync();
-      let filtered = libComponents;
-      if (libraryName) {
-        const lower = libraryName.toLowerCase();
-        filtered = filtered.filter((c) => c.libraryName.toLowerCase().includes(lower));
-      }
-      if (query) {
-        const lower = query.toLowerCase();
-        filtered = filtered.filter((c) => c.name.toLowerCase().includes(lower));
-      }
-      return {
-        count: filtered.length,
-        components: filtered.map((c) => ({
-          name: c.name,
-          key: c.key,
-          libraryName: c.libraryName,
-          description: c.description
-        }))
-      };
-    });
-  }
   function handleExportNode(nodeId, format, scale) {
     return __async(this, null, function* () {
       const node = yield figma.getNodeByIdAsync(nodeId);
@@ -1377,9 +1354,6 @@
         break;
       case "export_node":
         handleExportNode(msg.nodeId, msg.format, msg.scale).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
-        break;
-      case "get_library_components":
-        handleGetLibraryComponents(msg.libraryName, msg.query).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       // ─── Edit Tools ──────────────────────────────────────────
       case "modify_node":

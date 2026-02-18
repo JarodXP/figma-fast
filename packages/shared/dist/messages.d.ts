@@ -78,11 +78,6 @@ export type ServerToPluginMessage = {
     id: string;
     nodeId: string;
 } | {
-    type: 'get_library_components';
-    id: string;
-    libraryName?: string;
-    query?: string;
-} | {
     type: 'convert_to_component';
     id: string;
     nodeId: string;

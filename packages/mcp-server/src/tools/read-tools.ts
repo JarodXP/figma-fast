@@ -174,33 +174,70 @@ export function registerReadTools(server: McpServer): void {
 
   server.tool(
     'get_library_components',
-    `Search for components available from team libraries (published components from other files). Returns component names, keys, library names, and descriptions. Use the returned key with COMPONENT_INSTANCE's componentKey in build_scene to create instances.
+    `Search for published components in a Figma library file via the REST API. Returns component names, keys, and descriptions. Use the returned key with COMPONENT_INSTANCE's componentKey in build_scene to create instances.
 
-Use libraryName to filter by library (e.g. "Lucide") and query to search by component name (e.g. "pencil"). Both filters are case-insensitive substring matches.
+Requires FIGMA_API_TOKEN environment variable to be set.
 
-Example: { "libraryName": "Lucide", "query": "arrow" }`,
+Provide the fileKey of the library file (from its URL: figma.com/design/<fileKey>/...). Use query to filter results by component name.
+
+Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
     {
-      libraryName: z.string().optional().describe('Filter by library name (case-insensitive substring match)'),
-      query: z.string().optional().describe('Search component names (case-insensitive substring match)'),
+      fileKey: z.string().describe('The Figma file key of the library (from the file URL)'),
+      query: z.string().optional().describe('Filter component names (case-insensitive substring match)'),
     },
     async (params) => {
-      if (!isPluginConnected()) return NOT_CONNECTED;
+      const token = process.env.FIGMA_API_TOKEN;
+      if (!token) {
+        return {
+          content: [{ type: 'text' as const, text: 'FIGMA_API_TOKEN environment variable is not set. Set it to a Figma personal access token.' }],
+          isError: true,
+        };
+      }
 
       try {
-        const response = await sendToPlugin({
-          type: 'get_library_components',
-          libraryName: params.libraryName,
-          query: params.query,
-        }, TIMEOUT);
+        const url = `https://api.figma.com/v1/files/${params.fileKey}/components`;
+        const resp = await fetch(url, {
+          headers: { 'X-Figma-Token': token },
+        });
 
-        if (response.type === 'result' && response.success) {
+        if (!resp.ok) {
+          const body = await resp.text();
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify(response.data, null, 2) }],
+            content: [{ type: 'text' as const, text: `Figma API error (${resp.status}): ${body}` }],
+            isError: true,
           };
         }
+
+        const data = await resp.json() as {
+          meta: {
+            components: Array<{
+              key: string;
+              name: string;
+              description: string;
+              containing_frame?: { name: string };
+            }>;
+          };
+        };
+
+        let components = data.meta.components;
+
+        if (params.query) {
+          const lower = params.query.toLowerCase();
+          components = components.filter(c => c.name.toLowerCase().includes(lower));
+        }
+
+        const result = {
+          count: components.length,
+          components: components.map(c => ({
+            name: c.name,
+            key: c.key,
+            description: c.description,
+            containingFrame: c.containing_frame?.name,
+          })),
+        };
+
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
-          isError: true,
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
