@@ -83,8 +83,9 @@ const SceneNodeSchema = zod_1.z.lazy(() => zod_1.z.object({
     textDecoration: zod_1.z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
     textCase: zod_1.z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
     // Component instance
-    componentKey: zod_1.z.string().optional(),
-    overrides: zod_1.z.record(zod_1.z.any()).optional(),
+    componentKey: zod_1.z.string().optional().describe('Component key for published library components'),
+    componentId: zod_1.z.string().optional().describe('Node ID for local components (e.g. "121:317")'),
+    overrides: zod_1.z.record(zod_1.z.union([zod_1.z.string(), zod_1.z.boolean()])).optional().describe('Property overrides for COMPONENT_INSTANCE — keys are property names, values are strings or booleans'),
     // Component / Component Set
     componentDescription: zod_1.z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
     // Children

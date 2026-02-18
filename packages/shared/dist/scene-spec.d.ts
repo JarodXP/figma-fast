@@ -88,7 +88,8 @@ export interface SceneNode {
     textDecoration?: TextDecoration;
     textCase?: TextCase;
     componentKey?: string;
-    overrides?: Record<string, Partial<SceneNode>>;
+    componentId?: string;
+    overrides?: Record<string, string | boolean>;
     componentDescription?: string;
     children?: SceneNode[];
     visible?: boolean;

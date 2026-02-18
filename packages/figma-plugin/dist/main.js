@@ -186,11 +186,17 @@
         case "COMPONENT":
           return figma.createComponent();
         case "COMPONENT_INSTANCE": {
-          if (!spec.componentKey) {
-            throw new Error("COMPONENT_INSTANCE requires componentKey");
+          if (spec.componentId) {
+            const localComp = yield figma.getNodeByIdAsync(spec.componentId);
+            if (!localComp || localComp.type !== "COMPONENT") {
+              throw new Error(`Local component not found: ${spec.componentId}`);
+            }
+            return localComp.createInstance();
+          } else if (spec.componentKey) {
+            const imported = yield figma.importComponentByKeyAsync(spec.componentKey);
+            return imported.createInstance();
           }
-          const component = yield figma.importComponentByKeyAsync(spec.componentKey);
-          return component.createInstance();
+          throw new Error("COMPONENT_INSTANCE requires componentId or componentKey");
         }
         case "GROUP": {
           const frame = figma.createFrame();
@@ -511,6 +517,26 @@
         yield applyTextProperties(node, spec, failedFonts, errors);
       }
       applySizing(node, spec);
+      if (spec.type === "COMPONENT_INSTANCE" && spec.overrides && node.type === "INSTANCE") {
+        try {
+          const instance = node;
+          const propsToSet = {};
+          for (const [overrideName, value] of Object.entries(spec.overrides)) {
+            for (const key of Object.keys(instance.componentProperties)) {
+              const baseName = key.split("#")[0];
+              if (baseName === overrideName) {
+                propsToSet[key] = value;
+                break;
+              }
+            }
+          }
+          if (Object.keys(propsToSet).length > 0) {
+            instance.setProperties(propsToSet);
+          }
+        } catch (err) {
+          errors.push(`applyOverrides: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       if (spec.id) {
         idMap[spec.id] = node.id;
       }

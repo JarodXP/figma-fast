@@ -130,7 +130,8 @@ export interface SceneNode {
 
   // Component instance
   componentKey?: string;
-  overrides?: Record<string, Partial<SceneNode>>;
+  componentId?: string;
+  overrides?: Record<string, string | boolean>;
 
   // Component / Component Set
   componentDescription?: string;

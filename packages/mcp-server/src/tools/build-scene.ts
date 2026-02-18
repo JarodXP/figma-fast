@@ -96,8 +96,9 @@ const SceneNodeSchema: z.ZodType<any> = z.lazy(() =>
     textCase: z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
 
     // Component instance
-    componentKey: z.string().optional(),
-    overrides: z.record(z.any()).optional(),
+    componentKey: z.string().optional().describe('Component key for published library components'),
+    componentId: z.string().optional().describe('Node ID for local components (e.g. "121:317")'),
+    overrides: z.record(z.union([z.string(), z.boolean()])).optional().describe('Property overrides for COMPONENT_INSTANCE — keys are property names, values are strings or booleans'),
 
     // Component / Component Set
     componentDescription: z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
