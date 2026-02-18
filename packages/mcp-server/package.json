@@ -1,0 +1,22 @@
+{
+  "name": "@figma-fast/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@figma-fast/shared": "*",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "@types/uuid": "^10.0.0"
+  }
+}
