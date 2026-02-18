@@ -132,6 +132,7 @@ export interface SceneNode {
   componentKey?: string;
   componentId?: string;
   overrides?: Record<string, string | boolean>;
+  swapComponent?: string; // Component node ID to swap an INSTANCE to
 
   // Component / Component Set
   componentDescription?: string;

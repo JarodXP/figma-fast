@@ -1031,6 +1031,14 @@
         yield applyTextProperties(node, properties, failedFonts, errors);
       }
       applySizing(sceneNode, properties);
+      if (properties.swapComponent && node.type === "INSTANCE") {
+        const targetComp = yield figma.getNodeByIdAsync(properties.swapComponent);
+        if (targetComp && targetComp.type === "COMPONENT") {
+          node.swapComponent(targetComp);
+        } else {
+          errors.push(`swapComponent: component not found or not a COMPONENT: ${properties.swapComponent}`);
+        }
+      }
       try {
         if (typeof figma.commitUndo === "function") {
           figma.commitUndo();

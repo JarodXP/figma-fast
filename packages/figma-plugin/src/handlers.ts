@@ -263,6 +263,16 @@ export async function handleModifyNode(
   // Sizing
   applySizing(sceneNode, properties as SceneSpec);
 
+  // Swap component (for INSTANCE nodes)
+  if (properties.swapComponent && node.type === 'INSTANCE') {
+    const targetComp = await figma.getNodeByIdAsync(properties.swapComponent);
+    if (targetComp && targetComp.type === 'COMPONENT') {
+      (node as InstanceNode).swapComponent(targetComp as ComponentNode);
+    } else {
+      errors.push(`swapComponent: component not found or not a COMPONENT: ${properties.swapComponent}`);
+    }
+  }
+
   // Commit undo
   try {
     if (typeof figma.commitUndo === 'function') {

@@ -89,6 +89,8 @@ const ModifyPropertiesSchema = z.object({
   letterSpacing: z.number().optional(),
   textDecoration: z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
   textCase: z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
+  // Component instance
+  swapComponent: z.string().optional().describe('Component node ID to swap an INSTANCE node to (e.g. swap an icon)'),
 }).describe('Properties to update on the node');
 
 // ─── Tool Registration ─────────────────────────────────────────
@@ -107,7 +109,10 @@ Example — change a rectangle's fill to blue:
 { "nodeId": "123:456", "properties": { "fills": [{"type": "SOLID", "color": "#2563EB"}] } }
 
 Example — update text content and size:
-{ "nodeId": "123:789", "properties": { "characters": "New Title", "fontSize": 24, "fontWeight": 700 } }`,
+{ "nodeId": "123:789", "properties": { "characters": "New Title", "fontSize": 24, "fontWeight": 700 } }
+
+Example — swap an instance's component (e.g. change an icon):
+{ "nodeId": "131:866", "properties": { "swapComponent": "131:807" } }`,
     {
       nodeId: z.string().describe('The Figma node ID to modify'),
       properties: ModifyPropertiesSchema,

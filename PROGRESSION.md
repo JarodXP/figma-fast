@@ -470,8 +470,17 @@ Created `packages/mcp-server/src/tools/component-tools.ts` with 3 dedicated tool
 - [ ] **5.8.9** Test `build_scene` with `COMPONENT_INSTANCE` + `componentId` — verify local component instantiation
 - [ ] **5.8.10** Test `COMPONENT_INSTANCE` with `overrides` — verify property overrides applied via setProperties()
 
+### 5.9 — Instance Component Swapping
+
+Add `swapComponent` support to `modify_node` so Claude can swap the main component of an INSTANCE node (e.g. swap an icon inside a button).
+
+- [x] **5.9.1** Add `swapComponent?: string` (component node ID) to `SceneNode` in `packages/shared/src/scene-spec.ts`
+- [x] **5.9.2** Add `swapComponent` handling in `handleModifyNode()` in `packages/figma-plugin/src/handlers.ts`: call `(node as InstanceNode).swapComponent(targetComponent)` when provided
+- [x] **5.9.3** Add `swapComponent` to `ModifyPropertiesSchema` in `packages/mcp-server/src/tools/edit-tools.ts` and update tool description with swap example
+- [x] **5.9.4** Build all packages — clean compilation verified
+
 ### Deliverable for Phase 5
-→ Claude can create components and component sets with variants from scratch via `build_scene`, convert existing frames into components, combine components into variant groups, and manage component properties. Full design system authoring workflow unlocked.
+→ Claude can create components and component sets with variants from scratch via `build_scene`, convert existing frames into components, combine components into variant groups, manage component properties, and swap component instances. Full design system authoring workflow unlocked.
 
 ---
 
@@ -575,4 +584,4 @@ Current task: [UPDATE THIS]
 
 ---
 
-*Last updated: Phase 5 — implementation complete, functional testing pending. Component & Component Set support added to build_scene. 3 new lifecycle tools (convert_to_component, combine_as_variants, manage_component_properties). get_library_components searches via Figma REST API (Plugin API lacks component search). Local component instances via componentId + property overrides via setProperties(). All packages build cleanly.*
+*Last updated: Phase 5 — implementation complete, functional testing pending. Component & Component Set support added to build_scene. 3 new lifecycle tools (convert_to_component, combine_as_variants, manage_component_properties). get_library_components searches via Figma REST API. Local component instances via componentId + property overrides via setProperties(). Instance component swapping via modify_node swapComponent. All packages build cleanly.*

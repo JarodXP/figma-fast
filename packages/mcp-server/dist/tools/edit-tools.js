@@ -82,6 +82,8 @@ const ModifyPropertiesSchema = zod_1.z.object({
     letterSpacing: zod_1.z.number().optional(),
     textDecoration: zod_1.z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
     textCase: zod_1.z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
+    // Component instance
+    swapComponent: zod_1.z.string().optional().describe('Component node ID to swap an INSTANCE node to (e.g. swap an icon)'),
 }).describe('Properties to update on the node');
 // ─── Tool Registration ─────────────────────────────────────────
 function registerEditTools(server) {
@@ -95,7 +97,10 @@ Example — change a rectangle's fill to blue:
 { "nodeId": "123:456", "properties": { "fills": [{"type": "SOLID", "color": "#2563EB"}] } }
 
 Example — update text content and size:
-{ "nodeId": "123:789", "properties": { "characters": "New Title", "fontSize": 24, "fontWeight": 700 } }`, {
+{ "nodeId": "123:789", "properties": { "characters": "New Title", "fontSize": 24, "fontWeight": 700 } }
+
+Example — swap an instance's component (e.g. change an icon):
+{ "nodeId": "131:866", "properties": { "swapComponent": "131:807" } }`, {
         nodeId: zod_1.z.string().describe('The Figma node ID to modify'),
         properties: ModifyPropertiesSchema,
     }, async (params) => {

@@ -90,6 +90,7 @@ export interface SceneNode {
     componentKey?: string;
     componentId?: string;
     overrides?: Record<string, string | boolean>;
+    swapComponent?: string;
     componentDescription?: string;
     children?: SceneNode[];
     visible?: boolean;
