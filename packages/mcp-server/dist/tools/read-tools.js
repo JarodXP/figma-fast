@@ -137,6 +137,40 @@ function registerReadTools(server) {
             };
         }
     });
+    // ─── get_library_components ──────────────────────────────────
+    server.tool('get_library_components', `Search for components available from team libraries (published components from other files). Returns component names, keys, library names, and descriptions. Use the returned key with COMPONENT_INSTANCE's componentKey in build_scene to create instances.
+
+Use libraryName to filter by library (e.g. "Lucide") and query to search by component name (e.g. "pencil"). Both filters are case-insensitive substring matches.
+
+Example: { "libraryName": "Lucide", "query": "arrow" }`, {
+        libraryName: zod_1.z.string().optional().describe('Filter by library name (case-insensitive substring match)'),
+        query: zod_1.z.string().optional().describe('Search component names (case-insensitive substring match)'),
+    }, async (params) => {
+        if (!(0, server_js_1.isPluginConnected)())
+            return NOT_CONNECTED;
+        try {
+            const response = await (0, server_js_1.sendToPlugin)({
+                type: 'get_library_components',
+                libraryName: params.libraryName,
+                query: params.query,
+            }, TIMEOUT);
+            if (response.type === 'result' && response.success) {
+                return {
+                    content: [{ type: 'text', text: JSON.stringify(response.data, null, 2) }],
+                };
+            }
+            return {
+                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                isError: true,
+            };
+        }
+        catch (err) {
+            return {
+                content: [{ type: 'text', text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+                isError: true,
+            };
+        }
+    });
     // ─── export_node_as_image ────────────────────────────────────
     server.tool('export_node_as_image', 'Export a Figma node as an image (PNG, SVG, JPG, or PDF). For PNG/JPG, returns the image as a viewable image. For SVG, returns the SVG source as text. Use this to visually inspect designs.', {
         nodeId: zod_1.z.string().describe('The Figma node ID to export'),

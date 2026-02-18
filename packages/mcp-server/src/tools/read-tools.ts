@@ -170,6 +170,47 @@ export function registerReadTools(server: McpServer): void {
     }
   );
 
+  // ─── get_library_components ──────────────────────────────────
+
+  server.tool(
+    'get_library_components',
+    `Search for components available from team libraries (published components from other files). Returns component names, keys, library names, and descriptions. Use the returned key with COMPONENT_INSTANCE's componentKey in build_scene to create instances.
+
+Use libraryName to filter by library (e.g. "Lucide") and query to search by component name (e.g. "pencil"). Both filters are case-insensitive substring matches.
+
+Example: { "libraryName": "Lucide", "query": "arrow" }`,
+    {
+      libraryName: z.string().optional().describe('Filter by library name (case-insensitive substring match)'),
+      query: z.string().optional().describe('Search component names (case-insensitive substring match)'),
+    },
+    async (params) => {
+      if (!isPluginConnected()) return NOT_CONNECTED;
+
+      try {
+        const response = await sendToPlugin({
+          type: 'get_library_components',
+          libraryName: params.libraryName,
+          query: params.query,
+        }, TIMEOUT);
+
+        if (response.type === 'result' && response.success) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(response.data, null, 2) }],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          isError: true,
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text' as const, text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   // ─── export_node_as_image ────────────────────────────────────
 
   server.tool(

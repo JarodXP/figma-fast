@@ -16,6 +16,7 @@ import {
   handleDeleteNodes,
   handleMoveNode,
   handleCloneNode,
+  handleGetLibraryComponents,
   handleConvertToComponent,
   handleCombineAsVariants,
   handleManageComponentProperties,
@@ -93,6 +94,12 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
 
     case 'export_node':
       handleExportNode(msg.nodeId as string, msg.format as string, msg.scale as number)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'get_library_components':
+      handleGetLibraryComponents(msg.libraryName as string | undefined, msg.query as string | undefined)
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

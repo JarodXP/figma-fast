@@ -146,6 +146,35 @@ export async function handleGetLocalComponents(): Promise<unknown> {
   };
 }
 
+export async function handleGetLibraryComponents(
+  libraryName?: string,
+  query?: string,
+): Promise<unknown> {
+  const libComponents = await figma.teamLibrary.getAvailableComponentsAsync();
+
+  let filtered = libComponents;
+
+  if (libraryName) {
+    const lower = libraryName.toLowerCase();
+    filtered = filtered.filter(c => c.libraryName.toLowerCase().includes(lower));
+  }
+
+  if (query) {
+    const lower = query.toLowerCase();
+    filtered = filtered.filter(c => c.name.toLowerCase().includes(lower));
+  }
+
+  return {
+    count: filtered.length,
+    components: filtered.map(c => ({
+      name: c.name,
+      key: c.key,
+      libraryName: c.libraryName,
+      description: c.description,
+    })),
+  };
+}
+
 export async function handleExportNode(
   nodeId: string,
   format: string,
