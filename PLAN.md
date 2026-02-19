@@ -1,8 +1,8 @@
 # FigmaFast -- Strategic Plan
 
-> **Version:** 2.0.0
+> **Version:** 3.0.0
 > **Last updated:** 2026-02-19
-> **CTO audit status:** Design System Feature Pack planned
+> **CTO audit status:** Performance Optimization Phase planned
 
 ---
 
@@ -33,10 +33,10 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 | Branches | 1 (main only) |
 | Tags | None |
 | CI/CD | None (gap) |
-| Test coverage | 42 tests, all passing |
+| Test coverage | 60 tests, all passing |
 | Linting | ESLint (flat config) |
 | Formatting | Prettier |
-| MCP tools | 16 |
+| MCP tools | 24 |
 
 ---
 
@@ -55,7 +55,21 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 | RC-7 | No CI/CD pipeline | No automated verification | Still a gap. Add before v2.0 features ship | Prevents regressions |
 | RC-8 | No linting/formatting | Style drift | Phase 5.5 COMPLETED -- eslint + prettier | RESOLVED |
 
-### New (v2.0 -- Design System Feature Pack)
+### v2.0 -- Design System Feature Pack (ALL COMPLETE)
+
+All v2.0 requirements delivered: Phases 6-9 complete. 24 tools, 60 tests.
+
+### New (v3.0 -- Performance Optimizations)
+
+| # | Original Requirement | Concern | Recommendation | Impact |
+|---|----------------------|---------|----------------|--------|
+| RC-16 | `batch_modify` tool | Previously deferred (RC-1). Now justified by real-world data: 62 tool calls observed where ~15-20 should suffice. Each MCP round trip costs Claude tokens in tool-call overhead. | **ACCEPT.** Message type and Modification interface already exist in messages.ts. Refactor handleModifyNode into shared core function (applyNodeModifications) + wrapper. Single commitUndo for entire batch. | High impact: estimated 3-4x tool call reduction per session. |
+| RC-17 | `batch_get_node_info` tool | Trivial read-side batch. Loop + serialize. | **ACCEPT AS-IS.** Follows delete_nodes pattern. Separate tool (not overloading get_node_info) to preserve schema clarity. | Medium impact: eliminates N read calls when inspecting multiple nodes. |
+| RC-18 | Warning system for silently-ignored operations | High value for Claude decision quality. Currently modify_node returns success even when properties are silently dropped by Figma. | **ACCEPT with scope expansion.** Warnings should surface in BOTH modify_node/batch_modify AND build_scene. Limit to 4 high-confidence cases initially. Purely additive (warnings in errors array, non-blocking). | High impact: prevents Claude from wasting tokens on retry loops for operations that never had an effect. |
+
+---
+
+**v2.0 requirements (all complete):**
 
 | # | Original Requirement | Concern | Recommendation | Impact |
 |---|----------------------|---------|----------------|--------|
@@ -113,6 +127,18 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 - **Trade-off:** Two-step workflow: build_scene to create shapes, then boolean_operation to combine them.
 - **Alternative rejected:** BOOLEAN_OPERATION in build_scene with reversed build.
 
+### ADR-009: Refactor handleModifyNode into shared core for batch reuse
+- **Status:** Accepted (v3.0)
+- **Rationale:** `handleModifyNode` is 130+ lines containing font loading, property application, style binding, text properties, component swap, AND commitUndo. For batch_modify, we need the core logic without commitUndo. Extracting `applyNodeModifications(nodeId, properties)` is cleaner than adding a `skipCommitUndo` boolean flag.
+- **Trade-off:** Two-function pattern. `handleModifyNode` calls `applyNodeModifications` + commitUndo. `handleBatchModify` calls `applyNodeModifications` N times + one commitUndo. Slight refactor risk but the function boundary is natural.
+- **Alternative rejected:** Boolean `skipCommitUndo` parameter -- boolean flags are a code smell for a reason.
+
+### ADR-010: Warning system as additive `warnings` field, not blocking validation
+- **Status:** Accepted (v3.0)
+- **Rationale:** Detecting silently-ignored properties must NOT prevent the operation from executing. Figma silently drops these properties -- it doesn't error. Our warnings should mirror that behavior: inform, don't block. Warnings are returned alongside results, not as errors.
+- **Trade-off:** The `errors` array already exists and serves dual duty (actual errors + warnings). Cleanest approach: add a separate `warnings: string[]` to the response. This is a slight breaking change in response shape but additive-only.
+- **Decision:** Use the existing `errors` array but prefix warning messages with `[warning]` for machine-parseable distinction. Avoids response shape change while remaining clear. Consumers can filter by prefix if needed.
+
 ---
 
 ## Technology Stack
@@ -162,9 +188,10 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 - Node serializer for read responses (configurable depth)
 - Export with base64 encoding (custom implementation for Figma sandbox)
 
-### Phase 4: DEFERRED -- Batch Modifications
-- batch_modify, batch_text_replace
-- **CTO recommendation: DEFER pending latency measurement** (see RC-1, RC-2)
+### Phase 4: SUPERSEDED by Phase 10
+- Originally: batch_modify, batch_text_replace (deferred per RC-1, RC-2)
+- batch_modify now justified by real-world data and moved to Phase 10
+- batch_text_replace remains deferred (still gold-plating)
 
 ### Phase 5: Completed -- Component System
 - COMPONENT and COMPONENT_SET creation in build_scene
@@ -203,10 +230,30 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 - NOT a build_scene node type (see ADR-008)
 - Tests before implementation
 
-### Phase 10: DEFERRED -- Variable Binding
+### Phase 10: NEW -- Performance Optimizations
+- **Phase 10A:** Warning system for silently-ignored operations
+  - `detectIgnoredProperties(nodeType, properties)` -> `string[]` warnings
+  - Integrated into modify_node, batch_modify, and buildNode (build_scene)
+  - 4 initial detection rules: COMPONENT_SET children x/y, TEXT layout, non-TEXT text props, INSTANCE children/structure
+- **Phase 10B:** Refactor handleModifyNode into shared core
+  - Extract `applyNodeModifications(nodeId, properties)` -> `{nodeId, name, type, errors}`
+  - `handleModifyNode` = `applyNodeModifications` + `commitUndo`
+  - Required foundation for batch_modify
+- **Phase 10C:** `batch_modify` tool
+  - 1 new MCP tool, 1 new plugin handler
+  - Reuses existing `batch_modify` WS message type
+  - Loop over modifications calling `applyNodeModifications`, single `commitUndo`
+  - Response: `{ succeeded, failed, total, results: [...], warnings: [...] }`
+- **Phase 10D:** `batch_get_node_info` tool
+  - 1 new MCP tool, 1 new plugin handler, 1 new WS message type
+  - Loop + serialize, trivial implementation
+  - Response: `{ nodes: [...], errors: [...] }`
+- Tests before implementation (all sub-phases)
+
+### Phase 11: DEFERRED -- Variable Binding
 - Bind existing Figma variables to node properties
-- Only after Phases 6-9 are stable
-- Variable CREATION deferred to v3.0 (see RC-12)
+- Only after Phases 6-10 are stable
+- Variable CREATION deferred to v4.0 (see RC-12)
 
 ---
 
@@ -221,7 +268,10 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 | No CI/CD means build breaks go undetected | HIGH | MEDIUM | Add GitHub Actions before Phase 7 (high-impact phases). |
 | Plugin sandbox limits (no fetch) | MEDIUM | REALIZED | Handled: image fetch on MCP server, custom base64 in plugin. |
 | Figma API changes break plugin typings | MEDIUM | LOW | Pin @figma/plugin-typings version. |
-| Tool count growing (16 -> 23+) may confuse Claude | LOW | MEDIUM | Clear tool descriptions with examples. Group related tools logically. |
+| Tool count growing (24 -> 26) may confuse Claude | LOW | MEDIUM | Clear tool descriptions with examples. Group related tools logically. Batch tools reduce overall tool calls. |
+| handleModifyNode refactor introduces regression | MEDIUM | LOW | Extract-and-delegate pattern. Existing tests cover modify_node behavior. All tests must pass after refactor before new features. |
+| Warning false positives annoy Claude | LOW | MEDIUM | Conservative initial rules (4 high-confidence cases only). Prefix with [warning] for distinction from errors. |
+| batch_modify with large arrays could timeout | LOW | LOW | Existing 30s timeout is generous for property assignments. No network IO in plugin handler. |
 
 ---
 
@@ -232,7 +282,7 @@ FigmaFast is a high-performance MCP server for Figma that enables AI assistants 
 - Multi-plugin concurrent connections
 - Variable CREATION (collections, modes) -- deferred to v3.0
 - Chunked scene building (deferred per RC-4)
-- Batch operations (deferred per RC-1, RC-2)
+- batch_text_replace with regex (deferred per RC-2, still gold-plating)
 - BOOLEAN_OPERATION as a build_scene node type (see ADR-008)
 - REST API write operations (currently read-only via REST)
 - Automated e2e testing against live Figma

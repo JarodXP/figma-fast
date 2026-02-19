@@ -11,6 +11,7 @@ import { registerPageTools } from '../tools/page-tools.js';
 import { registerStyleTools } from '../tools/style-tools.js';
 import { registerImageTools } from '../tools/image-tools.js';
 import { registerBooleanTools } from '../tools/boolean-tools.js';
+import { registerBatchTools } from '../tools/batch-tools.js';
 
 // TEST-NF-001: MCP server starts and registers all 16 tools
 describe('MCP server tool registration', () => {
@@ -273,6 +274,71 @@ describe('Phase 8 image fill tool registration', () => {
     client = c;
     const { tools } = await client.listTools();
     expect(tools).toHaveLength(23);
+  });
+});
+
+// TEST-P10C-001, TEST-P10D-001, TEST-P10C-007
+// Phase 10 batch tools registration tests
+describe('Phase 10 performance tools registration', () => {
+  let client: Client;
+
+  afterEach(async () => {
+    try {
+      await client?.close();
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  async function buildFullServerWithBatch(): Promise<{ server: McpServer; client: Client }> {
+    const s = new McpServer({ name: 'figma-fast-test', version: '0.1.0' });
+    registerPingTool(s);
+    registerBuildSceneTool(s);
+    registerReadTools(s);
+    registerEditTools(s);
+    registerComponentTools(s);
+    registerPageTools(s);
+    registerStyleTools(s);
+    registerImageTools(s);
+    registerBooleanTools(s);
+    registerBatchTools(s);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await s.connect(serverTransport);
+    const c = new Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
+    await c.connect(clientTransport);
+    return { server: s, client: c };
+  }
+
+  // TEST-P10C-001: batch_modify tool registers with modifications parameter
+  it('registers batch_modify tool with modifications array parameter', async () => {
+    const { client: c } = await buildFullServerWithBatch();
+    client = c;
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain('batch_modify');
+    const tool = tools.find((t) => t.name === 'batch_modify');
+    expect(tool?.inputSchema?.properties).toHaveProperty('modifications');
+  });
+
+  // TEST-P10D-001: batch_get_node_info tool registers with nodeIds and depth parameters
+  it('registers batch_get_node_info tool with nodeIds and depth parameters', async () => {
+    const { client: c } = await buildFullServerWithBatch();
+    client = c;
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain('batch_get_node_info');
+    const tool = tools.find((t) => t.name === 'batch_get_node_info');
+    expect(tool?.inputSchema?.properties).toHaveProperty('nodeIds');
+    expect(tool?.inputSchema?.properties).toHaveProperty('depth');
+  });
+
+  // TEST-P10C-007: 26 tools total after Phase 10
+  it('registers exactly 26 tools after Phase 10', async () => {
+    const { client: c } = await buildFullServerWithBatch();
+    client = c;
+    const { tools } = await client.listTools();
+    expect(tools).toHaveLength(26);
   });
 });
 

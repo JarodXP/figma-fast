@@ -12,7 +12,7 @@ Traditional Figma MCP tools create nodes one at a time. A simple card with a tit
 
 FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates everything in one call — frames, text, shapes, components, component sets with variants, images from URL, and style bindings. A full dashboard in a single request. Combined with read tools for inspecting the canvas, edit tools for surgical changes, style/page/component management tools, and boolean operations for custom shapes, it gives AI assistants a complete Figma design system workflow.
 
-### Tool Inventory (24 tools)
+### Tool Inventory (26 tools)
 
 #### Scene Building
 
@@ -26,6 +26,7 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 |------|---------|
 | `get_document_info` | List pages, current page, top-level frames |
 | `get_node_info` | Read all properties of a node by ID |
+| `batch_get_node_info` | Read multiple nodes in one call (reduces round-trips) |
 | `get_selection` | Get currently selected nodes |
 | `get_styles` | List local paint, text, and effect styles |
 | `get_local_components` | List local components with keys |
@@ -37,6 +38,7 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 | Tool | Purpose |
 |------|---------|
 | `modify_node` | Update properties of an existing node (including style binding) |
+| `batch_modify` | Modify multiple nodes in one call (single undo entry) |
 | `delete_nodes` | Delete nodes by ID |
 | `move_node` | Reposition or reparent a node |
 | `clone_node` | Duplicate a node |
@@ -202,7 +204,7 @@ Claude calls `get_document_info` to see pages and frames, then `get_node_info` t
 Change the title text to "Total Revenue" and make the number blue.
 ```
 
-Claude calls `modify_node` twice -- once for the text content, once for the fill color.
+Claude calls `batch_modify` to update both in a single round-trip.
 
 ### Build a design system
 
@@ -240,15 +242,17 @@ figma-fast/
 │   │       ├── scene-spec.ts    # SceneNode type (the core contract)
 │   │       ├── messages.ts      # WebSocket message protocol
 │   │       ├── colors.ts        # Hex <-> RGBA conversion
-│   │       └── fonts.ts         # Font style mapping & collection
+│   │       ├── fonts.ts         # Font style mapping & collection
+│   │       └── warnings.ts     # Property constraint detection
 │   ├── mcp-server/          # MCP server + embedded WebSocket
 │   │   └── src/
 │   │       ├── index.ts         # Entry: stdio MCP + WS server
 │   │       ├── schemas.ts       # Shared Zod validation schemas
-│   │       ├── tools/           # MCP tool definitions (24 tools)
+│   │       ├── tools/           # MCP tool definitions (26 tools)
 │   │       │   ├── build-scene.ts    # Declarative scene builder
 │   │       │   ├── read-tools.ts     # 7 read/inspect tools
 │   │       │   ├── edit-tools.ts     # 4 edit/manipulation tools
+│   │       │   ├── batch-tools.ts   # 2 batch operation tools
 │   │       │   ├── component-tools.ts # 3 component lifecycle tools
 │   │       │   ├── style-tools.ts    # 3 style creation tools
 │   │       │   ├── page-tools.ts     # 3 page management tools
@@ -471,6 +475,41 @@ Combine nodeA and nodeB using SUBTRACT to create a cutout shape.
 ```
 
 Supported operations: `UNION`, `SUBTRACT`, `INTERSECT`, `EXCLUDE`.
+
+### Batch Operations
+
+Reduce round-trips by modifying or reading multiple nodes in a single call:
+
+```json
+// batch_modify — update 4 nodes in one call (single undo entry)
+{
+  "modifications": [
+    {"nodeId": "123:1", "properties": {"name": "Header", "fills": [{"type": "SOLID", "color": "#1A56DB"}]}},
+    {"nodeId": "123:2", "properties": {"characters": "Updated Title"}},
+    {"nodeId": "123:3", "properties": {"visible": false}},
+    {"nodeId": "123:4", "properties": {"opacity": 0.5}}
+  ]
+}
+
+// batch_get_node_info — read 5 nodes in one call
+{
+  "nodeIds": ["123:1", "123:2", "123:3", "123:4", "123:5"],
+  "depth": 2
+}
+```
+
+Batch operations create a single undo entry in Figma, making them cleaner than sequential calls.
+
+### Smart Warnings
+
+FigmaFast detects operations that Figma would silently ignore and returns warnings:
+
+- Setting x/y on children of a `COMPONENT_SET` (positions are auto-managed)
+- Applying layout properties (`layoutMode`, `itemSpacing`, `padding`) to `TEXT` nodes
+- Applying text properties (`characters`, `fontSize`) to non-`TEXT` nodes
+- Modifying structural properties on `COMPONENT_INSTANCE` nodes
+
+Warnings appear in the response as `[warning]`-prefixed messages, helping AI agents avoid dead-end loops.
 
 ## Configuration
 

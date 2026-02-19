@@ -199,3 +199,11 @@ export const ModifyPropertiesSchema = z
       .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
   })
   .describe('Properties to update on the node');
+
+// ─── Batch Schema ────────────────────────────────────────────────
+
+/** A single item in a batch_modify modifications array */
+export const BatchModificationSchema = z.object({
+  nodeId: z.string().describe('The Figma node ID to modify'),
+  properties: ModifyPropertiesSchema,
+});

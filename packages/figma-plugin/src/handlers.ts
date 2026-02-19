@@ -4,7 +4,7 @@
  */
 
 import type { SceneNode as SceneSpec, Fill, Effect as EffectSpec } from '@figma-fast/shared';
-import { rgbaToHex, hexToRgba } from '@figma-fast/shared';
+import { rgbaToHex, hexToRgba, detectIgnoredProperties } from '@figma-fast/shared';
 import { serializeNode } from './serialize-node.js';
 import {
   applyFills,
@@ -196,7 +196,20 @@ export async function handleExportNode(nodeId: string, format: string, scale: nu
 
 // ─── Edit Handlers ─────────────────────────────────────────────
 
-export async function handleModifyNode(nodeId: string, properties: Partial<SceneSpec>): Promise<unknown> {
+/** Result shape returned by applyNodeModifications and handleModifyNode */
+export interface ModifyResult {
+  nodeId: string;
+  name: string;
+  type: string;
+  errors: string[];
+}
+
+/**
+ * Core property-application logic for modifying a Figma node.
+ * Does NOT call commitUndo -- callers are responsible for that.
+ * Used by handleModifyNode (single) and handleBatchModify (batch).
+ */
+export async function applyNodeModifications(nodeId: string, properties: Partial<SceneSpec>): Promise<ModifyResult> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
     throw new Error(`Node not found: ${nodeId}`);
@@ -204,6 +217,11 @@ export async function handleModifyNode(nodeId: string, properties: Partial<Scene
 
   const errors: string[] = [];
   const sceneNode = node as SceneNode;
+
+  // Detect silently-ignored properties and add as warnings
+  const parentType = node.parent?.type;
+  const warnings = detectIgnoredProperties(node.type, parentType, properties as Record<string, unknown>);
+  errors.push(...warnings);
 
   // For TEXT nodes, load the current font first
   if (node.type === 'TEXT') {
@@ -313,6 +331,17 @@ export async function handleModifyNode(nodeId: string, properties: Partial<Scene
     }
   }
 
+  return {
+    nodeId: sceneNode.id,
+    name: sceneNode.name,
+    type: sceneNode.type,
+    errors,
+  };
+}
+
+export async function handleModifyNode(nodeId: string, properties: Partial<SceneSpec>): Promise<unknown> {
+  const result = await applyNodeModifications(nodeId, properties);
+
   // Commit undo
   try {
     if (typeof figma.commitUndo === 'function') {
@@ -322,12 +351,7 @@ export async function handleModifyNode(nodeId: string, properties: Partial<Scene
     // commitUndo may not be available
   }
 
-  return {
-    nodeId: sceneNode.id,
-    name: sceneNode.name,
-    type: sceneNode.type,
-    errors,
-  };
+  return result;
 }
 
 export async function handleDeleteNodes(nodeIds: string[]): Promise<unknown> {
@@ -877,6 +901,68 @@ export async function handleSetCurrentPage(pageId: string): Promise<unknown> {
   const page = node as PageNode;
   await figma.setCurrentPageAsync(page);
   return { id: page.id, name: page.name };
+}
+
+// ─── Batch Handlers ────────────────────────────────────────────
+
+export async function handleBatchModify(
+  modifications: Array<{ nodeId: string; properties: Partial<SceneSpec> }>,
+): Promise<unknown> {
+  let succeeded = 0;
+  let failed = 0;
+  const results: Array<{
+    nodeId: string;
+    name?: string;
+    type?: string;
+    errors: string[];
+    success: boolean;
+  }> = [];
+
+  for (const mod of modifications) {
+    try {
+      const result = await applyNodeModifications(mod.nodeId, mod.properties);
+      results.push({ ...result, success: true });
+      succeeded++;
+    } catch (err) {
+      results.push({
+        nodeId: mod.nodeId,
+        errors: [err instanceof Error ? err.message : String(err)],
+        success: false,
+      });
+      failed++;
+    }
+  }
+
+  // Single commitUndo for the entire batch
+  try {
+    if (typeof figma.commitUndo === 'function') {
+      figma.commitUndo();
+    }
+  } catch {
+    // commitUndo may not be available
+  }
+
+  return { succeeded, failed, total: modifications.length, results };
+}
+
+export async function handleBatchGetNodeInfo(nodeIds: string[], depth?: number): Promise<unknown> {
+  const nodes: unknown[] = [];
+  const errors: string[] = [];
+
+  for (const nodeId of nodeIds) {
+    try {
+      const node = await figma.getNodeByIdAsync(nodeId);
+      if (!node) {
+        errors.push(`Node not found: ${nodeId}`);
+        continue;
+      }
+      nodes.push(serializeNode(node, depth ?? 1));
+    } catch (err) {
+      errors.push(`Failed to read ${nodeId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { nodes, errors };
 }
 
 // ─── Helper ────────────────────────────────────────────────────

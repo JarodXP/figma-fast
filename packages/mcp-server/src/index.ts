@@ -15,6 +15,7 @@ import { registerPageTools } from './tools/page-tools.js';
 import { registerStyleTools } from './tools/style-tools.js';
 import { registerImageTools } from './tools/image-tools.js';
 import { registerBooleanTools } from './tools/boolean-tools.js';
+import { registerBatchTools } from './tools/batch-tools.js';
 
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 
@@ -34,6 +35,7 @@ registerPageTools(server);
 registerStyleTools(server);
 registerImageTools(server);
 registerBooleanTools(server);
+registerBatchTools(server);
 
 // Start embedded WebSocket server
 startWsServer(WS_PORT);

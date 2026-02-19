@@ -4,7 +4,7 @@
  */
 
 import type { SceneNode as SceneSpec, Fill, Stroke, Effect } from '@figma-fast/shared';
-import { hexToRgba } from '@figma-fast/shared';
+import { hexToRgba, detectIgnoredProperties } from '@figma-fast/shared';
 import { getFontStyle } from './fonts.js';
 
 /** Maps client-assigned spec IDs to Figma node IDs */
@@ -474,6 +474,11 @@ export async function buildNode(
 
   if (spec.x !== undefined) node.x = spec.x;
   if (spec.y !== undefined) node.y = spec.y;
+
+  // 3b. WARNINGS — detect silently-ignored properties
+  const parentType = parent?.type;
+  const propertyWarnings = detectIgnoredProperties(spec.type, parentType, spec as Record<string, unknown>);
+  errors.push(...propertyWarnings);
 
   // 4. VISUAL PROPERTIES
   if (spec.fills && 'fills' in node) {

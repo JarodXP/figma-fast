@@ -27,6 +27,8 @@ import {
   handleCreateEffectStyle,
   handleSetImageFill,
   handleBooleanOperation,
+  handleBatchModify,
+  handleBatchGetNodeInfo,
 } from './handlers.js';
 
 // Show plugin UI
@@ -230,6 +232,20 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
 
     case 'boolean_operation':
       handleBooleanOperation(msg.operation as string, msg.nodeIds as string[])
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Batch Tools ──────────────────────────────────────────
+
+    case 'batch_modify':
+      handleBatchModify(msg.modifications as Array<{ nodeId: string; properties: Partial<SceneSpec> }>)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'batch_get_node_info':
+      handleBatchGetNodeInfo(msg.nodeIds as string[], msg.depth as number | undefined)
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

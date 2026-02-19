@@ -2,10 +2,27 @@
 (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
+  var __defProps = Object.defineProperties;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
   var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __getOwnPropSymbols = Object.getOwnPropertySymbols;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __propIsEnum = Object.prototype.propertyIsEnumerable;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __spreadValues = (a, b) => {
+    for (var prop in b || (b = {}))
+      if (__hasOwnProp.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    if (__getOwnPropSymbols)
+      for (var prop of __getOwnPropSymbols(b)) {
+        if (__propIsEnum.call(b, prop))
+          __defNormalProp(a, prop, b[prop]);
+      }
+    return a;
+  };
+  var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
   var __commonJS = (cb, mod) => function __require() {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   };
@@ -139,12 +156,69 @@
     }
   });
 
+  // ../shared/dist/warnings.js
+  var require_warnings = __commonJS({
+    "../shared/dist/warnings.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.detectIgnoredProperties = detectIgnoredProperties3;
+      function detectIgnoredProperties3(nodeType, parentType, properties) {
+        const warnings = [];
+        if (parentType === "COMPONENT_SET") {
+          if ("x" in properties)
+            warnings.push("[warning] x is ignored on children of COMPONENT_SET (positions are auto-managed by Figma)");
+          if ("y" in properties)
+            warnings.push("[warning] y is ignored on children of COMPONENT_SET (positions are auto-managed by Figma)");
+        }
+        if (nodeType === "TEXT") {
+          const layoutProps = ["layoutMode", "itemSpacing", "padding", "primaryAxisAlignItems", "counterAxisAlignItems"];
+          for (const prop of layoutProps) {
+            if (prop in properties) {
+              warnings.push(`[warning] ${prop} is ignored on TEXT nodes (TEXT does not support auto-layout)`);
+            }
+          }
+        }
+        if (nodeType !== "TEXT") {
+          const textProps = [
+            "characters",
+            "fontSize",
+            "fontFamily",
+            "fontWeight",
+            "fontStyle",
+            "textAlignHorizontal",
+            "textAlignVertical",
+            "textAutoResize",
+            "lineHeight",
+            "letterSpacing",
+            "textDecoration",
+            "textCase",
+            "textStyleId"
+          ];
+          for (const prop of textProps) {
+            if (prop in properties) {
+              warnings.push(`[warning] ${prop} is ignored on ${nodeType} nodes (only TEXT nodes support text properties)`);
+            }
+          }
+        }
+        if (nodeType === "INSTANCE") {
+          const structuralProps = ["layoutMode", "children"];
+          for (const prop of structuralProps) {
+            if (prop in properties) {
+              warnings.push(`[warning] ${prop} is ignored on INSTANCE nodes (structure is controlled by the main component)`);
+            }
+          }
+        }
+        return warnings;
+      }
+    }
+  });
+
   // ../shared/dist/index.js
   var require_dist = __commonJS({
     "../shared/dist/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
-      exports.collectFonts = exports.getFontStyle = exports.rgbaToHex = exports.hexToRgba = void 0;
+      exports.detectIgnoredProperties = exports.collectFonts = exports.getFontStyle = exports.rgbaToHex = exports.hexToRgba = void 0;
       var colors_js_1 = require_colors();
       Object.defineProperty(exports, "hexToRgba", { enumerable: true, get: function() {
         return colors_js_1.hexToRgba;
@@ -158,6 +232,10 @@
       } });
       Object.defineProperty(exports, "collectFonts", { enumerable: true, get: function() {
         return fonts_js_1.collectFonts;
+      } });
+      var warnings_js_1 = require_warnings();
+      Object.defineProperty(exports, "detectIgnoredProperties", { enumerable: true, get: function() {
+        return warnings_js_1.detectIgnoredProperties;
       } });
     }
   });
@@ -553,6 +631,9 @@
       }
       if (spec.x !== void 0) node.x = spec.x;
       if (spec.y !== void 0) node.y = spec.y;
+      const parentType = parent == null ? void 0 : parent.type;
+      const propertyWarnings = (0, import_shared2.detectIgnoredProperties)(spec.type, parentType, spec);
+      errors.push(...propertyWarnings);
       if (spec.fills && "fills" in node) {
         applyFills(node, spec.fills, errors, imagePayloads);
       }
@@ -1077,15 +1158,18 @@
       };
     });
   }
-  function handleModifyNode(nodeId, properties) {
+  function applyNodeModifications(nodeId, properties) {
     return __async(this, null, function* () {
-      var _a, _b, _c;
+      var _a, _b, _c, _d;
       const node = yield figma.getNodeByIdAsync(nodeId);
       if (!node) {
         throw new Error(`Node not found: ${nodeId}`);
       }
       const errors = [];
       const sceneNode = node;
+      const parentType = (_a = node.parent) == null ? void 0 : _a.type;
+      const warnings = (0, import_shared4.detectIgnoredProperties)(node.type, parentType, properties);
+      errors.push(...warnings);
       if (node.type === "TEXT") {
         const textNode = node;
         const fontName = textNode.fontName;
@@ -1093,7 +1177,7 @@
           yield figma.loadFontAsync(fontName);
         }
         if (properties.fontFamily || properties.fontWeight) {
-          const family = (_a = properties.fontFamily) != null ? _a : fontName !== figma.mixed ? fontName.family : "Inter";
+          const family = (_b = properties.fontFamily) != null ? _b : fontName !== figma.mixed ? fontName.family : "Inter";
           const style = properties.fontWeight ? typeof properties.fontWeight === "number" ? getFontStyleFromWeight(properties.fontWeight) : String(properties.fontWeight) : fontName !== figma.mixed ? fontName.style : "Regular";
           try {
             yield figma.loadFontAsync({ family, style });
@@ -1106,8 +1190,8 @@
         sceneNode.name = properties.name;
       }
       if (properties.width !== void 0 || properties.height !== void 0) {
-        const w = (_b = properties.width) != null ? _b : sceneNode.width;
-        const h = (_c = properties.height) != null ? _c : sceneNode.height;
+        const w = (_c = properties.width) != null ? _c : sceneNode.width;
+        const h = (_d = properties.height) != null ? _d : sceneNode.height;
         sceneNode.resize(w, h);
       }
       if (properties.x !== void 0) sceneNode.x = properties.x;
@@ -1169,18 +1253,24 @@
           errors.push(`swapComponent: component not found or not a COMPONENT: ${properties.swapComponent}`);
         }
       }
-      try {
-        if (typeof figma.commitUndo === "function") {
-          figma.commitUndo();
-        }
-      } catch (e) {
-      }
       return {
         nodeId: sceneNode.id,
         name: sceneNode.name,
         type: sceneNode.type,
         errors
       };
+    });
+  }
+  function handleModifyNode(nodeId, properties) {
+    return __async(this, null, function* () {
+      const result = yield applyNodeModifications(nodeId, properties);
+      try {
+        if (typeof figma.commitUndo === "function") {
+          figma.commitUndo();
+        }
+      } catch (e) {
+      }
+      return result;
     });
   }
   function handleDeleteNodes(nodeIds) {
@@ -1637,6 +1727,53 @@
       return { id: page.id, name: page.name };
     });
   }
+  function handleBatchModify(modifications) {
+    return __async(this, null, function* () {
+      let succeeded = 0;
+      let failed = 0;
+      const results = [];
+      for (const mod of modifications) {
+        try {
+          const result = yield applyNodeModifications(mod.nodeId, mod.properties);
+          results.push(__spreadProps(__spreadValues({}, result), { success: true }));
+          succeeded++;
+        } catch (err) {
+          results.push({
+            nodeId: mod.nodeId,
+            errors: [err instanceof Error ? err.message : String(err)],
+            success: false
+          });
+          failed++;
+        }
+      }
+      try {
+        if (typeof figma.commitUndo === "function") {
+          figma.commitUndo();
+        }
+      } catch (e) {
+      }
+      return { succeeded, failed, total: modifications.length, results };
+    });
+  }
+  function handleBatchGetNodeInfo(nodeIds, depth) {
+    return __async(this, null, function* () {
+      const nodes = [];
+      const errors = [];
+      for (const nodeId of nodeIds) {
+        try {
+          const node = yield figma.getNodeByIdAsync(nodeId);
+          if (!node) {
+            errors.push(`Node not found: ${nodeId}`);
+            continue;
+          }
+          nodes.push(serializeNode(node, depth != null ? depth : 1));
+        } catch (err) {
+          errors.push(`Failed to read ${nodeId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      return { nodes, errors };
+    });
+  }
   function getFontStyleFromWeight(weight) {
     switch (weight) {
       case 100:
@@ -1781,6 +1918,13 @@
       // ─── Boolean Operation Tools ──────────────────────────────
       case "boolean_operation":
         handleBooleanOperation(msg.operation, msg.nodeIds).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Batch Tools ──────────────────────────────────────────
+      case "batch_modify":
+        handleBatchModify(msg.modifications).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "batch_get_node_info":
+        handleBatchGetNodeInfo(msg.nodeIds, msg.depth).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       default:
         console.log(`[FigmaFast] Unknown message type: ${msg.type}`);

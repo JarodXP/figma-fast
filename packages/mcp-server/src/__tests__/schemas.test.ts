@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { SceneNodeSchema, FillSchema, EffectSchema, ModifyPropertiesSchema } from '../schemas.js';
+import { z } from 'zod';
+import {
+  SceneNodeSchema,
+  FillSchema,
+  EffectSchema,
+  ModifyPropertiesSchema,
+  BatchModificationSchema,
+} from '../schemas.js';
 
 describe('SceneNodeSchema', () => {
   // TEST-018: SceneNodeSchema accepts minimal valid FRAME
@@ -195,6 +202,39 @@ describe('Phase 8 image fill schema', () => {
       type: 'IMAGE',
       imageUrl: 'not-a-url',
     });
+    expect(result.success).toBe(false);
+  });
+});
+
+// Phase 10C/D: Batch tool schema tests (TEST-P10C-004, TEST-P10C-006, TEST-P10D-004)
+describe('Phase 10 batch schemas', () => {
+  // TEST-P10C-006: BatchModificationSchema validates single modification item
+  it('BatchModificationSchema accepts valid nodeId and properties', () => {
+    const result = BatchModificationSchema.safeParse({
+      nodeId: '1:1',
+      properties: { name: 'test' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('BatchModificationSchema rejects modification without nodeId', () => {
+    const result = BatchModificationSchema.safeParse({
+      properties: { name: 'test' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // TEST-P10C-004: Empty modifications array is rejected (min 1)
+  it('batch_modify rejects empty modifications array (min 1)', () => {
+    const schema = z.object({ modifications: z.array(BatchModificationSchema).min(1) });
+    const result = schema.safeParse({ modifications: [] });
+    expect(result.success).toBe(false);
+  });
+
+  // TEST-P10D-004: Empty nodeIds array is rejected (min 1)
+  it('batch_get_node_info rejects empty nodeIds array (min 1)', () => {
+    const schema = z.object({ nodeIds: z.array(z.string()).min(1) });
+    const result = schema.safeParse({ nodeIds: [] });
     expect(result.success).toBe(false);
   });
 });

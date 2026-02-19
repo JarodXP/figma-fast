@@ -13,6 +13,7 @@ const page_tools_js_1 = require("../tools/page-tools.js");
 const style_tools_js_1 = require("../tools/style-tools.js");
 const image_tools_js_1 = require("../tools/image-tools.js");
 const boolean_tools_js_1 = require("../tools/boolean-tools.js");
+const batch_tools_js_1 = require("../tools/batch-tools.js");
 // TEST-NF-001: MCP server starts and registers all 16 tools
 (0, vitest_1.describe)('MCP server tool registration', () => {
     let server;
@@ -246,6 +247,65 @@ const boolean_tools_js_1 = require("../tools/boolean-tools.js");
         client = c;
         const { tools } = await client.listTools();
         (0, vitest_1.expect)(tools).toHaveLength(23);
+    });
+});
+// TEST-P10C-001, TEST-P10D-001, TEST-P10C-007
+// Phase 10 batch tools registration tests
+(0, vitest_1.describe)('Phase 10 performance tools registration', () => {
+    let client;
+    (0, vitest_1.afterEach)(async () => {
+        try {
+            await client?.close();
+        }
+        catch {
+            // Ignore cleanup errors
+        }
+    });
+    async function buildFullServerWithBatch() {
+        const s = new mcp_js_1.McpServer({ name: 'figma-fast-test', version: '0.1.0' });
+        (0, ping_js_1.registerPingTool)(s);
+        (0, build_scene_js_1.registerBuildSceneTool)(s);
+        (0, read_tools_js_1.registerReadTools)(s);
+        (0, edit_tools_js_1.registerEditTools)(s);
+        (0, component_tools_js_1.registerComponentTools)(s);
+        (0, page_tools_js_1.registerPageTools)(s);
+        (0, style_tools_js_1.registerStyleTools)(s);
+        (0, image_tools_js_1.registerImageTools)(s);
+        (0, boolean_tools_js_1.registerBooleanTools)(s);
+        (0, batch_tools_js_1.registerBatchTools)(s);
+        const [clientTransport, serverTransport] = inMemory_js_1.InMemoryTransport.createLinkedPair();
+        await s.connect(serverTransport);
+        const c = new index_js_1.Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
+        await c.connect(clientTransport);
+        return { server: s, client: c };
+    }
+    // TEST-P10C-001: batch_modify tool registers with modifications parameter
+    (0, vitest_1.it)('registers batch_modify tool with modifications array parameter', async () => {
+        const { client: c } = await buildFullServerWithBatch();
+        client = c;
+        const { tools } = await client.listTools();
+        const toolNames = tools.map((t) => t.name);
+        (0, vitest_1.expect)(toolNames).toContain('batch_modify');
+        const tool = tools.find((t) => t.name === 'batch_modify');
+        (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('modifications');
+    });
+    // TEST-P10D-001: batch_get_node_info tool registers with nodeIds and depth parameters
+    (0, vitest_1.it)('registers batch_get_node_info tool with nodeIds and depth parameters', async () => {
+        const { client: c } = await buildFullServerWithBatch();
+        client = c;
+        const { tools } = await client.listTools();
+        const toolNames = tools.map((t) => t.name);
+        (0, vitest_1.expect)(toolNames).toContain('batch_get_node_info');
+        const tool = tools.find((t) => t.name === 'batch_get_node_info');
+        (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('nodeIds');
+        (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('depth');
+    });
+    // TEST-P10C-007: 26 tools total after Phase 10
+    (0, vitest_1.it)('registers exactly 26 tools after Phase 10', async () => {
+        const { client: c } = await buildFullServerWithBatch();
+        client = c;
+        const { tools } = await client.listTools();
+        (0, vitest_1.expect)(tools).toHaveLength(26);
     });
 });
 // TEST-P9-001, TEST-P9-002, TEST-P9-003, TEST-P9-010

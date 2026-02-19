@@ -1,6 +1,6 @@
 # FigmaFast -- Task Breakdown
 
-> **Version:** 2.0.0
+> **Version:** 3.0.0
 > **Last updated:** 2026-02-19
 > **Mandatory sequence:** Tests -> Implementation -> Validation -> Regression -> Fix (if needed)
 
@@ -855,43 +855,654 @@ All 9 tasks (TASK-001 through TASK-009) completed. See PROGRESS.md for execution
 
 ---
 
+## Phase 10A: Warning System
+
+### TASK-042: Write tests for detectIgnoredProperties (TEST-P10A-001 through TEST-P10A-007)
+- **Status:** PENDING
+- **Dependencies:** None
+- **Type:** Test
+- **Est. iterations:** 2-3
+- **Files affected:** `packages/shared/src/__tests__/warnings.test.ts` (new)
+- **Verification:** `npm test` passes (new tests will FAIL until TASK-043 implements the function)
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read TESTS.md for TEST-P10A-001 through TEST-P10A-007.
+  Read packages/shared/src/__tests__/colors.test.ts for the existing test pattern in the shared package.
+
+  Task: Create packages/shared/src/__tests__/warnings.test.ts with unit tests for a `detectIgnoredProperties` function.
+
+  The function signature will be:
+  detectIgnoredProperties(nodeType: string, parentType: string | undefined, properties: Record<string, unknown>): string[]
+
+  Write tests as describe('detectIgnoredProperties', () => { ... }).
+  Import will be: import { detectIgnoredProperties } from '../warnings.js';
+
+  Tests to implement (all from TESTS.md):
+  1. TEST-P10A-001: COMPONENT node with COMPONENT_SET parent, properties {x: 100, y: 200} -> warns about x, y
+  2. TEST-P10A-002: TEXT node, properties {layoutMode: "VERTICAL", itemSpacing: 8, padding: 16} -> warns about all three
+  3. TEST-P10A-003: RECTANGLE node, properties {characters: "Hello", fontSize: 16, fontFamily: "Inter"} -> warns about all three
+  4. TEST-P10A-004: INSTANCE node, properties {layoutMode: "HORIZONTAL", children: []} -> warns about both
+  5. TEST-P10A-005: FRAME node, properties {x: 100, fills: [...], layoutMode: "VERTICAL"} -> no warnings (empty array)
+  6. TEST-P10A-006: TEXT node, properties {characters: "Hello", fontSize: 16, fontFamily: "Inter", x: 50} -> no warnings
+  7. TEST-P10A-007: Any warning string returned must start with "[warning]"
+
+  Mark these as SKIPPED (describe.skip) since the module doesn't exist yet.
+  Run `npm test` to verify existing tests still pass.
+  ```
+
+### TASK-043: Implement detectIgnoredProperties in shared package
+- **Status:** PENDING
+- **Dependencies:** TASK-042
+- **Type:** Implementation
+- **Est. iterations:** 2-3
+- **Files affected:** `packages/shared/src/warnings.ts` (new), `packages/shared/src/index.ts` (update re-exports)
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read TESTS.md for TEST-P10A-001 through TEST-P10A-007 (the spec for what this function does).
+  Read packages/shared/src/index.ts for the existing re-export pattern.
+
+  Task: Create packages/shared/src/warnings.ts with:
+
+  /**
+   * Detect properties that will be silently ignored by Figma for a given node type.
+   * Returns an array of warning strings, each prefixed with "[warning]".
+   * These warnings are informational -- they do NOT block the operation.
+   */
+  export function detectIgnoredProperties(
+    nodeType: string,
+    parentType: string | undefined,
+    properties: Record<string, unknown>,
+  ): string[] {
+    const warnings: string[] = [];
+
+    // Rule 1: x/y on children of COMPONENT_SET are auto-managed
+    if (parentType === 'COMPONENT_SET') {
+      if ('x' in properties) warnings.push('[warning] x is ignored on children of COMPONENT_SET (positions are auto-managed by Figma)');
+      if ('y' in properties) warnings.push('[warning] y is ignored on children of COMPONENT_SET (positions are auto-managed by Figma)');
+    }
+
+    // Rule 2: Layout properties on TEXT nodes
+    if (nodeType === 'TEXT') {
+      const layoutProps = ['layoutMode', 'itemSpacing', 'padding', 'primaryAxisAlignItems', 'counterAxisAlignItems'];
+      for (const prop of layoutProps) {
+        if (prop in properties) {
+          warnings.push(`[warning] ${prop} is ignored on TEXT nodes (TEXT does not support auto-layout)`);
+        }
+      }
+    }
+
+    // Rule 3: Text properties on non-TEXT nodes
+    if (nodeType !== 'TEXT') {
+      const textProps = ['characters', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'textAlignHorizontal', 'textAlignVertical', 'textAutoResize', 'lineHeight', 'letterSpacing', 'textDecoration', 'textCase', 'textStyleId'];
+      for (const prop of textProps) {
+        if (prop in properties) {
+          warnings.push(`[warning] ${prop} is ignored on ${nodeType} nodes (only TEXT nodes support text properties)`);
+        }
+      }
+    }
+
+    // Rule 4: Structural changes on INSTANCE nodes (read-only structure)
+    if (nodeType === 'INSTANCE') {
+      const structuralProps = ['layoutMode', 'children'];
+      for (const prop of structuralProps) {
+        if (prop in properties) {
+          warnings.push(`[warning] ${prop} is ignored on INSTANCE nodes (structure is controlled by the main component)`);
+        }
+      }
+    }
+
+    return warnings;
+  }
+
+  Update packages/shared/src/index.ts to add:
+  export { detectIgnoredProperties } from './warnings.js';
+
+  Run `npm run build` to verify shared package compiles.
+  ```
+
+### TASK-044: Enable warning system tests and validate
+- **Status:** PENDING
+- **Dependencies:** TASK-042, TASK-043
+- **Type:** Validation
+- **Est. iterations:** 1-2
+- **Files affected:** `packages/shared/src/__tests__/warnings.test.ts`
+- **Verification:** `npm run build && npm test` passes ALL tests including new warning tests
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+
+  Task:
+  1. In packages/shared/src/__tests__/warnings.test.ts, change describe.skip to describe (enable the tests).
+  2. Run `npm test` -- all tests must pass.
+  3. If any tests fail, fix the implementation in packages/shared/src/warnings.ts (NOT the tests).
+  4. Run `npm run build && npm test` for full regression.
+  5. Report: total tests, pass count, fail count.
+  ```
+
+### TASK-045: Integrate warnings into handleModifyNode
+- **Status:** PENDING
+- **Dependencies:** TASK-044
+- **Type:** Implementation
+- **Est. iterations:** 2-3
+- **Files affected:** `packages/figma-plugin/src/handlers.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/figma-plugin/src/handlers.ts, specifically handleModifyNode (lines ~199-331).
+  Read packages/shared/src/warnings.ts for the detectIgnoredProperties function.
+
+  Task: Add warning detection to handleModifyNode.
+
+  At the START of handleModifyNode, after resolving the node and initializing errors[]:
+
+  // Detect silently-ignored properties
+  import { detectIgnoredProperties } from '@figma-fast/shared';
+
+  // After: const sceneNode = node as SceneNode;
+  // Determine parent type for context
+  const parentType = node.parent?.type;
+  const warnings = detectIgnoredProperties(node.type, parentType, properties as Record<string, unknown>);
+  errors.push(...warnings);
+
+  Add the import at the top of the file:
+  import { detectIgnoredProperties } from '@figma-fast/shared';
+
+  NOTE: The warnings are added to the existing errors[] array. They are prefixed with [warning]
+  so consumers can distinguish them from actual errors.
+
+  Run `npm run build` until all packages compile clean.
+  ```
+
+### TASK-046: Integrate warnings into buildNode (build_scene)
+- **Status:** PENDING
+- **Dependencies:** TASK-044
+- **Type:** Implementation
+- **Est. iterations:** 2-4
+- **Files affected:** `packages/figma-plugin/src/scene-builder/build-node.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/figma-plugin/src/scene-builder/build-node.ts for the buildNode function.
+  Read packages/shared/src/warnings.ts for the detectIgnoredProperties function.
+
+  Task: Add warning detection to buildNode.
+
+  In the buildNode function, after the node is created and before applying properties
+  (after step 2 "NAME AND GEOMETRY" and before step 4 "VISUAL PROPERTIES"):
+
+  // 3b. WARNINGS — detect silently-ignored properties
+  import { detectIgnoredProperties } from '@figma-fast/shared';
+
+  const parentType = parent?.type;
+  const warnings = detectIgnoredProperties(spec.type, parentType, spec as Record<string, unknown>);
+  errors.push(...warnings);
+
+  Add the import at the top of the file alongside the existing @figma-fast/shared imports.
+
+  Run `npm run build` until all packages compile clean.
+  ```
+
+---
+
+## Phase 10B: Refactor handleModifyNode
+
+### TASK-047: Extract applyNodeModifications from handleModifyNode
+- **Status:** PENDING
+- **Dependencies:** TASK-045 (warnings already integrated before refactor)
+- **Type:** Refactor
+- **Est. iterations:** 3-5
+- **Files affected:** `packages/figma-plugin/src/handlers.ts`
+- **Verification:** `npm run build && npm test` passes ALL tests (zero regression)
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/figma-plugin/src/handlers.ts, specifically handleModifyNode (lines ~199-331).
+
+  Task: Extract the core property-application logic from handleModifyNode into a separate
+  exported async function called applyNodeModifications.
+
+  1. Create a new exported function:
+
+  export interface ModifyResult {
+    nodeId: string;
+    name: string;
+    type: string;
+    errors: string[];
+  }
+
+  export async function applyNodeModifications(
+    nodeId: string,
+    properties: Partial<SceneSpec>,
+  ): Promise<ModifyResult> {
+    // Move ALL the logic from handleModifyNode here EXCEPT:
+    // - The commitUndo call at the end
+    // Everything else stays: node lookup, font loading, property application,
+    // warning detection, text properties, sizing, component swap.
+    // Return { nodeId, name, type, errors }
+  }
+
+  2. Rewrite handleModifyNode to delegate:
+
+  export async function handleModifyNode(nodeId: string, properties: Partial<SceneSpec>): Promise<unknown> {
+    const result = await applyNodeModifications(nodeId, properties);
+
+    // Commit undo
+    try {
+      if (typeof figma.commitUndo === 'function') {
+        figma.commitUndo();
+      }
+    } catch {
+      // commitUndo may not be available
+    }
+
+    return result;
+  }
+
+  CRITICAL: This is a refactor. The external behavior of handleModifyNode MUST NOT change.
+  The response shape, error handling, and warning detection must be identical.
+
+  Run `npm run build && npm test` -- ALL 60 existing tests MUST pass.
+  If any test fails, you broke the refactor. Fix it before proceeding.
+  ```
+
+---
+
+## Phase 10C: batch_modify
+
+### TASK-048: Add batch_get_node_info message type to shared protocol
+- **Status:** PENDING
+- **Dependencies:** None (can run parallel with TASK-047)
+- **Type:** Implementation
+- **Est. iterations:** 1
+- **Files affected:** `packages/shared/src/messages.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/shared/src/messages.ts for the current WS message protocol.
+
+  Task: Add 1 new message type to the ServerToPluginMessage union:
+  // Phase 10D: Batch Read
+  | { type: 'batch_get_node_info'; id: string; nodeIds: string[]; depth?: number }
+
+  Note: batch_modify ALREADY EXISTS (line ~33). No changes needed for it.
+
+  Run `npm run build` to verify shared package compiles.
+  ```
+
+### TASK-049: Write tests for batch_modify tool registration (TEST-P10C-001, TEST-P10C-004, TEST-P10C-006, TEST-P10C-007)
+- **Status:** PENDING
+- **Dependencies:** None
+- **Type:** Test
+- **Est. iterations:** 2-3
+- **Files affected:** `packages/mcp-server/src/__tests__/server.test.ts` (update), `packages/mcp-server/src/__tests__/schemas.test.ts` (update)
+- **Verification:** `npm test` passes (new tests SKIPPED until implementation)
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read TESTS.md for TEST-P10C-001, TEST-P10C-004, TEST-P10C-006, TEST-P10C-007.
+  Read packages/mcp-server/src/__tests__/server.test.ts for the existing test pattern.
+  Read packages/mcp-server/src/__tests__/schemas.test.ts for schema test patterns.
+
+  Task: Add SKIPPED tests in server.test.ts:
+
+  describe.skip('Phase 10 performance tools registration', () => {
+    // Build a full server with ALL tools including batch tools
+    // (will need to import registerBatchTools from '../tools/batch-tools.js')
+
+    // TEST-P10C-001: batch_modify tool registers with modifications parameter
+    it('registers batch_modify tool with modifications array parameter', async () => {
+      // Check tool exists with 'modifications' in input schema properties
+    });
+
+    // TEST-P10D-001: batch_get_node_info tool registers with nodeIds and depth parameters
+    it('registers batch_get_node_info tool with nodeIds and depth parameters', async () => {
+      // Check tool exists with 'nodeIds' and 'depth' in input schema properties
+    });
+
+    // TEST-P10C-007: 26 tools total after Phase 10
+    it('registers exactly 26 tools after Phase 10', async () => {
+      // tools.length === 26
+    });
+  });
+
+  In schemas.test.ts, add SKIPPED schema validation tests:
+
+  describe.skip('Phase 10 batch schemas', () => {
+    // TEST-P10C-006: BatchModifySchema validates modifications array
+    it('BatchModifyInputSchema accepts valid modifications array', () => {
+      // Parse { modifications: [{ nodeId: "1:1", properties: { name: "test" } }] }
+      // Should succeed
+    });
+
+    it('BatchModifyInputSchema rejects modifications without nodeId', () => {
+      // Parse { modifications: [{ properties: { name: "test" } }] }
+      // Should fail
+    });
+
+    // TEST-P10C-004: Empty modifications array is rejected
+    it('BatchModifyInputSchema rejects empty modifications array', () => {
+      // Parse { modifications: [] }
+      // Should fail (min 1)
+    });
+
+    // TEST-P10D-004: Empty nodeIds array is rejected
+    it('BatchGetNodeInfoSchema rejects empty nodeIds array', () => {
+      // Parse { nodeIds: [] }
+      // Should fail (min 1)
+    });
+  });
+
+  Run `npm test` to verify existing tests still pass.
+  ```
+
+### TASK-050: Implement handleBatchModify plugin handler
+- **Status:** PENDING
+- **Dependencies:** TASK-047 (applyNodeModifications must exist)
+- **Type:** Implementation
+- **Est. iterations:** 2-4
+- **Files affected:** `packages/figma-plugin/src/handlers.ts`, `packages/figma-plugin/src/main.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/figma-plugin/src/handlers.ts for applyNodeModifications (from TASK-047).
+  Read packages/figma-plugin/src/handlers.ts for handleDeleteNodes (pattern for batch loop with errors).
+  Read packages/shared/src/messages.ts for the Modification interface (lines 8-12).
+
+  Task: Implement handleBatchModify handler in handlers.ts:
+
+  export async function handleBatchModify(
+    modifications: Array<{ nodeId: string; properties: Partial<SceneSpec> }>,
+  ): Promise<unknown> {
+    let succeeded = 0;
+    let failed = 0;
+    const results: Array<{
+      nodeId: string;
+      name?: string;
+      type?: string;
+      errors: string[];
+      success: boolean;
+    }> = [];
+
+    for (const mod of modifications) {
+      try {
+        const result = await applyNodeModifications(mod.nodeId, mod.properties);
+        results.push({ ...result, success: true });
+        succeeded++;
+      } catch (err) {
+        results.push({
+          nodeId: mod.nodeId,
+          errors: [err instanceof Error ? err.message : String(err)],
+          success: false,
+        });
+        failed++;
+      }
+    }
+
+    // Single commitUndo for the entire batch
+    try {
+      if (typeof figma.commitUndo === 'function') {
+        figma.commitUndo();
+      }
+    } catch {
+      // commitUndo may not be available
+    }
+
+    return { succeeded, failed, total: modifications.length, results };
+  }
+
+  Add to main.ts switch statement:
+  case 'batch_modify':
+    handleBatchModify(
+      msg.modifications as Array<{ nodeId: string; properties: Partial<SceneSpec> }>,
+    )
+      .then((data) => sendResult(msg.id, data))
+      .catch((err) => sendError(msg.id, err));
+    break;
+
+  Add handleBatchModify to the imports in main.ts.
+
+  Run `npm run build` until all packages compile clean.
+  ```
+
+### TASK-051: Implement batch_modify MCP tool
+- **Status:** PENDING
+- **Dependencies:** TASK-048, TASK-050
+- **Type:** Implementation
+- **Est. iterations:** 3-5
+- **Files affected:** `packages/mcp-server/src/tools/batch-tools.ts` (new), `packages/mcp-server/src/index.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/mcp-server/src/tools/edit-tools.ts for the MCP tool registration pattern.
+  Read packages/mcp-server/src/schemas.ts for ModifyPropertiesSchema.
+  Read packages/mcp-server/src/ws/server.ts for sendToPlugin.
+
+  Task: Create packages/mcp-server/src/tools/batch-tools.ts with 2 MCP tools:
+
+  1. batch_modify tool:
+     - Name: "batch_modify"
+     - Description:
+       "Modify properties of multiple Figma nodes in a single round-trip. Each modification applies
+       to one node. All changes are batched into a single undo step.
+
+       Use this instead of calling modify_node multiple times -- it is significantly more efficient
+       for bulk edits (e.g., updating colors across many elements, repositioning multiple nodes,
+       changing text in several labels).
+
+       Individual failures do not abort the batch -- the response shows which succeeded and which failed.
+
+       Example -- change fills on 3 nodes:
+       { \"modifications\": [
+         { \"nodeId\": \"1:1\", \"properties\": { \"fills\": [{\"type\": \"SOLID\", \"color\": \"#FF0000\"}] } },
+         { \"nodeId\": \"1:2\", \"properties\": { \"fills\": [{\"type\": \"SOLID\", \"color\": \"#00FF00\"}] } },
+         { \"nodeId\": \"1:3\", \"properties\": { \"name\": \"Updated\", \"opacity\": 0.8 } }
+       ] }"
+     - Parameters:
+       {
+         modifications: z.array(
+           z.object({
+             nodeId: z.string().describe('The Figma node ID to modify'),
+             properties: ModifyPropertiesSchema,
+           })
+         ).min(1).describe('Array of modifications to apply. Each targets a single node.'),
+       }
+     - Sends to plugin: { type: 'batch_modify', modifications }
+     - Response handling:
+       const data = response.data as { succeeded: number; failed: number; total: number; results: Array<{nodeId: string; name?: string; type?: string; errors: string[]; success: boolean}> };
+       let text = `Batch modify: ${data.succeeded}/${data.total} succeeded`;
+       if (data.failed > 0) text += `, ${data.failed} failed`;
+       // Collect all warnings and errors from results
+       const allIssues: string[] = [];
+       for (const r of data.results) {
+         if (r.errors.length > 0) {
+           allIssues.push(...r.errors.map(e => `  ${r.nodeId}: ${e}`));
+         }
+       }
+       if (allIssues.length > 0) text += `\n\nDetails:\n${allIssues.join('\n')}`;
+
+  2. batch_get_node_info tool:
+     - Name: "batch_get_node_info"
+     - Description:
+       "Get detailed properties of multiple Figma nodes in a single round-trip. Returns the same
+       data as get_node_info but for multiple nodes at once.
+
+       Use this instead of calling get_node_info multiple times -- especially after build_scene
+       to verify results, or before batch_modify to inspect current state.
+
+       Individual failures (node not found) do not abort the batch.
+
+       Example: { \"nodeIds\": [\"1:1\", \"1:2\", \"1:3\"], \"depth\": 1 }"
+     - Parameters:
+       {
+         nodeIds: z.array(z.string()).min(1).describe('Array of Figma node IDs to inspect'),
+         depth: z.number().int().min(0).max(10).optional().describe('How many levels of children to include (default 1)'),
+       }
+     - Sends to plugin: { type: 'batch_get_node_info', nodeIds, depth }
+     - Response handling:
+       const data = response.data as { nodes: unknown[]; errors: string[] };
+       let text = JSON.stringify(data, null, 2);
+
+  Export registerBatchTools(server: McpServer).
+
+  Update packages/mcp-server/src/index.ts:
+  - Import registerBatchTools from './tools/batch-tools.js'
+  - Call registerBatchTools(server) after registerBooleanTools
+
+  Run `npm run build` until all packages compile clean.
+  ```
+
+---
+
+## Phase 10D: batch_get_node_info
+
+### TASK-052: Implement handleBatchGetNodeInfo plugin handler
+- **Status:** PENDING
+- **Dependencies:** TASK-048 (message type must exist)
+- **Type:** Implementation
+- **Est. iterations:** 2-3
+- **Files affected:** `packages/figma-plugin/src/handlers.ts`, `packages/figma-plugin/src/main.ts`
+- **Verification:** `npm run build` succeeds
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+  Read packages/figma-plugin/src/handlers.ts for handleGetNodeInfo (the single-node version).
+  Read packages/figma-plugin/src/serialize-node.ts for serializeNode.
+  Read packages/figma-plugin/src/handlers.ts for handleDeleteNodes (batch loop pattern with errors).
+
+  Task: Implement handleBatchGetNodeInfo handler in handlers.ts:
+
+  export async function handleBatchGetNodeInfo(
+    nodeIds: string[],
+    depth?: number,
+  ): Promise<unknown> {
+    const nodes: unknown[] = [];
+    const errors: string[] = [];
+
+    for (const nodeId of nodeIds) {
+      try {
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node) {
+          errors.push(`Node not found: ${nodeId}`);
+          continue;
+        }
+        nodes.push(serializeNode(node, depth ?? 1));
+      } catch (err) {
+        errors.push(`Failed to read ${nodeId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return { nodes, errors };
+  }
+
+  Add to main.ts switch statement:
+  case 'batch_get_node_info':
+    handleBatchGetNodeInfo(
+      msg.nodeIds as string[],
+      msg.depth as number | undefined,
+    )
+      .then((data) => sendResult(msg.id, data))
+      .catch((err) => sendError(msg.id, err));
+    break;
+
+  Add handleBatchGetNodeInfo to the imports in main.ts.
+
+  Run `npm run build` until all packages compile clean.
+  ```
+
+---
+
+## Phase 10 Validation
+
+### TASK-053: Enable Phase 10 tests and validate
+- **Status:** PENDING
+- **Dependencies:** TASK-049, TASK-050, TASK-051, TASK-052
+- **Type:** Validation
+- **Est. iterations:** 2-4
+- **Files affected:** `packages/mcp-server/src/__tests__/server.test.ts`, `packages/mcp-server/src/__tests__/schemas.test.ts`
+- **Verification:** `npm run build && npm test` passes ALL tests
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+
+  Task:
+  1. In packages/mcp-server/src/__tests__/server.test.ts:
+     - Unskip the Phase 10 tool registration tests.
+     - Import registerBatchTools from '../tools/batch-tools.js'.
+     - The buildFullServer helper for Phase 10 tests must call registerBatchTools(s).
+     - Update any assertion that checks total tool count to 26.
+
+  2. In packages/mcp-server/src/__tests__/schemas.test.ts:
+     - Unskip the Phase 10 batch schema tests.
+     - Import the schemas needed from '../schemas.js' (may need to add BatchModificationSchema).
+
+  3. Run `npm test` -- all tests must pass.
+  4. Run `npm run build && npm test && npm run lint` for full regression.
+  5. Report: total test files, total tests, pass count, fail count.
+
+  If tests fail, fix either tests or implementation to make everything green.
+  ```
+
+### TASK-054: Full build + test + lint regression after Phase 10
+- **Status:** PENDING
+- **Dependencies:** TASK-053
+- **Type:** Validation
+- **Est. iterations:** 1-2
+- **Files affected:** None (read-only)
+- **Verification:** `npm run build && npm test && npm run lint && npm run format:check` all exit 0
+- **Ralph prompt:**
+  ```
+  Project: FigmaFast at /Users/jarod/Projects/vortex/figma-fast
+
+  Task: Run full validation:
+  1. npm run build -- all 3 packages compile clean
+  2. npm test -- ALL tests pass (should be 60 + new tests)
+  3. npm run lint -- clean
+  4. npm run format:check -- clean
+  5. Report: total test files, total tests, pass, fail, build time.
+  If ANY step fails, fix it.
+  ```
+
+---
+
 ## Task Dependency Graph
 
 ```
-Phase 6: Page Management
-  TASK-014 (page tests)     ─┐
-  TASK-015 (message types)  ─┤─── TASK-016 (plugin handlers) ─┐
-                             └─── TASK-017 (MCP tools) ───────┤
-                                                               └── TASK-018 (validate)
+Phase 6-9: Design System Feature Pack -- ALL COMPLETE (TASK-014 through TASK-041)
 
-Phase 7A: Style Binding
-  TASK-019 (binding tests)  ─── TASK-020 (schema fields) ─── TASK-021 (plugin impl) ─── TASK-022 (tool desc) ─── TASK-023 (validate)
+Phase 10A: Warning System
+  TASK-042 (warning tests) ─── TASK-043 (implement) ─── TASK-044 (validate) ─┬── TASK-045 (integrate into modify_node)
+                                                                              └── TASK-046 (integrate into build_scene)
 
-Phase 7B: Style Creation
-  TASK-024 (creation tests) ─┐
-  TASK-025 (message types)  ─┤─── TASK-026 (plugin handlers) ─┐
-                             └─── TASK-027 (MCP tools) ───────┤
-                                                               └── TASK-028 (validate)
+Phase 10B: Refactor
+  TASK-045 ─── TASK-047 (extract applyNodeModifications)
 
-Phase 8: Image Fills
-  TASK-029 (image tests)    ─┐
-  TASK-030 (schema update)  ─┤─── TASK-031 (WS message) ──┬── TASK-032 (MCP tool) ─┐
-                             │                             └── TASK-033 (plugin)    ├── TASK-034 (build_scene) ── TASK-035 (validate)
-                             └──────────────────────────────────────────────────────┘
+Phase 10C: batch_modify
+  TASK-048 (WS message type) ─┐
+  TASK-049 (batch tests)      │
+  TASK-047 (refactor) ────────┤─── TASK-050 (plugin handler) ─┐
+                              └─── TASK-051 (MCP tool) ───────┤
+                                                               └── TASK-053 (validate)
 
-Phase 9: Boolean Operations
-  TASK-036 (bool tests)     ─┐
-  TASK-037 (message type)   ─┤─── TASK-038 (plugin handler) ─┐
-                             └─── TASK-039 (MCP tool) ───────┤
-                                                              └── TASK-040 (validate)
+Phase 10D: batch_get_node_info
+  TASK-048 (WS message type) ─── TASK-052 (plugin handler) ─── TASK-053 (validate)
 
 Full Regression
-  TASK-040 ─── TASK-041 (final regression)
+  TASK-053 ─── TASK-054 (final regression)
 ```
 
 ---
 
 ## Summary
+
+### v2.0 Design System Feature Pack -- COMPLETE
 
 | Phase | Tasks | New Tools | New Tests (spec) | Est. Total Iterations |
 |-------|-------|-----------|-----------------|----------------------|
@@ -901,4 +1512,15 @@ Full Regression
 | Phase 8: Image Fills | TASK-029 to TASK-035 (7) | 1 | 9 | 18-28 |
 | Phase 9: Boolean Operations | TASK-036 to TASK-040 (5) | 1 | 10 | 10-16 |
 | Regression | TASK-041 (1) | 0 | 0 | 1-2 |
-| **TOTAL** | **28 tasks** | **8 new tools** | **46 new tests** | **66-102 iterations** |
+| **v2.0 TOTAL** | **28 tasks** | **8 new tools** | **46 new tests** | **66-102 iterations** |
+
+### v3.0 Performance Optimizations -- PLANNED
+
+| Phase | Tasks | New Tools | New Tests (spec) | Est. Total Iterations |
+|-------|-------|-----------|-----------------|----------------------|
+| Phase 10A: Warning System | TASK-042 to TASK-046 (5) | 0 (internal) | 8 | 8-14 |
+| Phase 10B: Refactor | TASK-047 (1) | 0 (refactor) | 3 | 3-5 |
+| Phase 10C: batch_modify | TASK-048 to TASK-051 (4) | 1 | 7 | 8-14 |
+| Phase 10D: batch_get_node_info | TASK-052 (1) | 1 | 6 | 2-3 |
+| Validation + Regression | TASK-053 to TASK-054 (2) | 0 | 0 | 3-6 |
+| **v3.0 TOTAL** | **13 tasks** | **2 new tools** | **24 new tests** | **24-42 iterations** |

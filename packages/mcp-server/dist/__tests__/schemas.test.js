@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const vitest_1 = require("vitest");
+const zod_1 = require("zod");
 const schemas_js_1 = require("../schemas.js");
 (0, vitest_1.describe)('SceneNodeSchema', () => {
     // TEST-018: SceneNodeSchema accepts minimal valid FRAME
@@ -175,6 +176,35 @@ const schemas_js_1 = require("../schemas.js");
             type: 'IMAGE',
             imageUrl: 'not-a-url',
         });
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+});
+// Phase 10C/D: Batch tool schema tests (TEST-P10C-004, TEST-P10C-006, TEST-P10D-004)
+(0, vitest_1.describe)('Phase 10 batch schemas', () => {
+    // TEST-P10C-006: BatchModificationSchema validates single modification item
+    (0, vitest_1.it)('BatchModificationSchema accepts valid nodeId and properties', () => {
+        const result = schemas_js_1.BatchModificationSchema.safeParse({
+            nodeId: '1:1',
+            properties: { name: 'test' },
+        });
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('BatchModificationSchema rejects modification without nodeId', () => {
+        const result = schemas_js_1.BatchModificationSchema.safeParse({
+            properties: { name: 'test' },
+        });
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    // TEST-P10C-004: Empty modifications array is rejected (min 1)
+    (0, vitest_1.it)('batch_modify rejects empty modifications array (min 1)', () => {
+        const schema = zod_1.z.object({ modifications: zod_1.z.array(schemas_js_1.BatchModificationSchema).min(1) });
+        const result = schema.safeParse({ modifications: [] });
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    // TEST-P10D-004: Empty nodeIds array is rejected (min 1)
+    (0, vitest_1.it)('batch_get_node_info rejects empty nodeIds array (min 1)', () => {
+        const schema = zod_1.z.object({ nodeIds: zod_1.z.array(zod_1.z.string()).min(1) });
+        const result = schema.safeParse({ nodeIds: [] });
         (0, vitest_1.expect)(result.success).toBe(false);
     });
 });

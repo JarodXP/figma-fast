@@ -1,6 +1,6 @@
 # FigmaFast -- Technical Architecture
 
-> **Version:** 2.0.0
+> **Version:** 3.0.0
 > **Last updated:** 2026-02-19
 
 ---
@@ -49,7 +49,7 @@
 
 ---
 
-## Directory Structure (v2.0 projected)
+## Directory Structure (v3.0 projected)
 
 ```
 figma-fast/
@@ -61,9 +61,11 @@ figma-fast/
 │   │   │   ├── messages.ts         # WebSocket message protocol types
 │   │   │   ├── colors.ts           # hexToRgba / rgbaToHex conversion
 │   │   │   ├── fonts.ts            # Pure font logic (getFontStyle, collectFonts)
+│   │   │   ├── warnings.ts        # NEW: detectIgnoredProperties (warning system)
 │   │   │   └── __tests__/
 │   │   │       ├── colors.test.ts
-│   │   │       └── fonts.test.ts
+│   │   │       ├── fonts.test.ts
+│   │   │       └── warnings.test.ts # NEW: warning detection tests
 │   │   ├── dist/
 │   │   ├── package.json
 │   │   └── tsconfig.json
@@ -83,7 +85,8 @@ figma-fast/
 │   │   │   │   ├── page-tools.ts   # NEW: 3 page management tools
 │   │   │   │   ├── style-tools.ts  # NEW: 3 style creation tools
 │   │   │   │   ├── image-tools.ts  # NEW: set_image_fill tool
-│   │   │   │   └── boolean-tools.ts # NEW: boolean_operation tool
+│   │   │   │   ├── boolean-tools.ts # NEW: boolean_operation tool
+│   │   │   │   └── batch-tools.ts  # NEW: batch_modify + batch_get_node_info tools
 │   │   │   └── __tests__/
 │   │   │       ├── schemas.test.ts
 │   │   │       ├── server.test.ts
@@ -199,7 +202,7 @@ UI iframe bridges WebSocket to main thread via `postMessage`. Main thread has Fi
 
 ## API Contracts
 
-### MCP Tools (24 total after v2.0)
+### MCP Tools (26 total after v3.0)
 
 | Tool | Type | Input Schema | Timeout | Plugin-Routed | Phase |
 |------|------|-------------|---------|---------------|-------|
@@ -227,13 +230,18 @@ UI iframe bridges WebSocket to main thread via `postMessage`. Main thread has Fi
 | `create_effect_style` | style | `{ name, effects }` | 30s | Yes | **7B** |
 | `set_image_fill` | image | `{ nodeId, imageUrl, scaleMode? }` | 60s | Hybrid | **8** |
 | `boolean_operation` | shape | `{ operation, nodeIds }` | 30s | Yes | **9** |
+| `batch_modify` | batch-edit | `{ modifications: [{nodeId, properties}, ...] }` | 30s | Yes | **10C** |
+| `batch_get_node_info` | batch-read | `{ nodeIds, depth? }` | 30s | Yes | **10D** |
 
 ### WebSocket Message Protocol (v2.0)
 
-**Server -> Plugin:** `ServerToPluginMessage` (24 message types)
+**Server -> Plugin:** `ServerToPluginMessage` (25 message types -- batch_modify already existed)
 **Plugin -> Server:** `PluginToServerMessage` (2 types: `pong` | `result`)
 
-New message types in v2.0:
+New message types in v3.0:
+- `batch_get_node_info` (Phase 10D)
+
+Message types in v2.0:
 - `create_page` (Phase 6)
 - `rename_page` (Phase 6)
 - `set_current_page` (Phase 6)
@@ -252,6 +260,31 @@ New fields on SceneNode:
 
 New fields on Fill:
 - `imageUrl?: string` -- URL for IMAGE fill type (Phase 8, server downloads)
+
+### Warning System (v3.0)
+
+```
+detectIgnoredProperties(nodeType: string, parentType: string | undefined, properties: Record<string, unknown>): string[]
+```
+
+Pure function in `@figma-fast/shared/warnings`. No Figma API dependency. Returns `[warning]`-prefixed strings.
+
+Integrated into:
+- `handleModifyNode` / `applyNodeModifications` (via handlers.ts)
+- `buildNode` (via build-node.ts)
+- `handleBatchModify` (via the shared `applyNodeModifications` core)
+
+### Refactored modify_node Architecture (v3.0)
+
+```
+handleModifyNode(nodeId, properties)
+  -> applyNodeModifications(nodeId, properties)  // core logic, no commitUndo
+  -> commitUndo()
+
+handleBatchModify(modifications[])
+  -> for each: applyNodeModifications(mod.nodeId, mod.properties)
+  -> commitUndo() // once for entire batch
+```
 
 ---
 
@@ -303,5 +336,6 @@ New fields on Fill:
 6. **No input sanitization** -- Hex color parsing trusts input format
 7. **commitUndo fragile** -- Wrapped in try/catch with silent failure
 8. **Plugin handler tests blocked by Figma sandbox** -- Cannot unit test handlers that call figma.* without mocking framework
-9. **handlers.ts growing large** -- 607+ lines, may need splitting after v2.0
+9. **handlers.ts growing large** -- 900+ lines after v2.0, will grow further with batch handlers. Split into handlers/ directory after v3.0 if it exceeds 1200 lines.
 10. **serialize-node.ts missing style ID serialization** -- Does not return fillStyleId/textStyleId/effectStyleId on read (should add in Phase 7A)
+11. **Warning system covers only 4 rules** -- Many more Figma quirks exist (cornerRadius on ELLIPSE, etc.). Expand as usage data reveals more silent-ignore patterns.

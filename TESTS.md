@@ -1,6 +1,6 @@
 # FigmaFast -- Test Specifications
 
-> **Version:** 2.0.0
+> **Version:** 3.0.0
 > **Last updated:** 2026-02-19
 > **Framework:** vitest ^4.0.18
 
@@ -12,10 +12,10 @@
 |------|-------|--------|
 | `packages/shared/src/__tests__/colors.test.ts` | 11 | PASSING |
 | `packages/shared/src/__tests__/fonts.test.ts` | 8 | PASSING |
-| `packages/mcp-server/src/__tests__/schemas.test.ts` | 20 | PASSING |
-| `packages/mcp-server/src/__tests__/server.test.ts` | 1 | PASSING |
+| `packages/mcp-server/src/__tests__/schemas.test.ts` | 26 | PASSING |
+| `packages/mcp-server/src/__tests__/server.test.ts` | 13 | PASSING |
 | `packages/mcp-server/src/__tests__/ws-server.test.ts` | 2 | PASSING |
-| **TOTAL** | **42** | **ALL PASSING** |
+| **TOTAL** | **60** | **ALL PASSING** |
 
 ---
 
@@ -519,6 +519,299 @@ THEN exactly 24 tools are returned (23 after P8 + 1 boolean tool)
 
 ---
 
+## Phase 10A: Warning System Tests
+
+```
+TEST-P10A-001: detectIgnoredProperties warns on x/y for COMPONENT children in COMPONENT_SET
+Type: unit
+Priority: critical
+
+GIVEN a node type "COMPONENT" whose parent type is "COMPONENT_SET"
+AND properties include { x: 100, y: 200 }
+WHEN detectIgnoredProperties is called with (nodeType="COMPONENT", parentType="COMPONENT_SET", properties)
+THEN it returns warnings containing "x" and "y" with explanation about auto-managed positions
+```
+
+```
+TEST-P10A-002: detectIgnoredProperties warns on layout properties for TEXT nodes
+Type: unit
+Priority: critical
+
+GIVEN a node type "TEXT"
+AND properties include { layoutMode: "VERTICAL", itemSpacing: 8, padding: 16 }
+WHEN detectIgnoredProperties is called with (nodeType="TEXT", parentType=undefined, properties)
+THEN it returns warnings for layoutMode, itemSpacing, and padding with explanation that TEXT nodes do not support auto-layout
+```
+
+```
+TEST-P10A-003: detectIgnoredProperties warns on text properties for non-TEXT nodes
+Type: unit
+Priority: critical
+
+GIVEN a node type "RECTANGLE"
+AND properties include { characters: "Hello", fontSize: 16, fontFamily: "Inter" }
+WHEN detectIgnoredProperties is called with (nodeType="RECTANGLE", parentType=undefined, properties)
+THEN it returns warnings for characters, fontSize, and fontFamily with explanation that only TEXT nodes support text properties
+```
+
+```
+TEST-P10A-004: detectIgnoredProperties warns on structural changes to INSTANCE nodes
+Type: unit
+Priority: high
+
+GIVEN a node type "INSTANCE"
+AND properties include { layoutMode: "HORIZONTAL", children: [] }
+WHEN detectIgnoredProperties is called with (nodeType="INSTANCE", parentType=undefined, properties)
+THEN it returns warnings that INSTANCE nodes have read-only structure (layoutMode and children are controlled by the main component)
+```
+
+```
+TEST-P10A-005: detectIgnoredProperties returns empty array for valid FRAME properties
+Type: unit
+Priority: high
+
+GIVEN a node type "FRAME"
+AND properties include { x: 100, y: 200, fills: [{ type: "SOLID", color: "#FF0000" }], layoutMode: "VERTICAL" }
+WHEN detectIgnoredProperties is called with (nodeType="FRAME", parentType=undefined, properties)
+THEN it returns an empty array (no warnings)
+```
+
+```
+TEST-P10A-006: detectIgnoredProperties returns empty array for valid TEXT properties
+Type: unit
+Priority: medium
+
+GIVEN a node type "TEXT"
+AND properties include { characters: "Hello", fontSize: 16, fontFamily: "Inter", x: 50 }
+WHEN detectIgnoredProperties is called with (nodeType="TEXT", parentType=undefined, properties)
+THEN it returns an empty array (no warnings -- these are all valid for TEXT)
+```
+
+```
+TEST-P10A-007: Warnings include [warning] prefix for machine-parseable distinction
+Type: unit
+Priority: high
+
+GIVEN any warning scenario (e.g., TEXT node with layoutMode)
+WHEN detectIgnoredProperties returns a warning string
+THEN every warning string starts with "[warning]"
+```
+
+```
+TEST-P10A-008: modify_node response includes warnings for silently-ignored properties
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a TEXT node in Figma
+WHEN handleModifyNode is called with { layoutMode: "VERTICAL" }
+THEN the response errors array includes a warning about layoutMode being ignored on TEXT nodes
+AND the modify operation still completes successfully (non-blocking)
+```
+
+---
+
+## Phase 10B: Refactor Tests (handleModifyNode -> applyNodeModifications)
+
+```
+TEST-P10B-001: applyNodeModifications applies name change without commitUndo
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN an existing RECTANGLE node with name "Old"
+WHEN applyNodeModifications(nodeId, { name: "New" }) is called
+THEN the node's name is "New"
+AND commitUndo was NOT called
+AND returns { nodeId, name: "New", type: "RECTANGLE", errors: [] }
+```
+
+```
+TEST-P10B-002: handleModifyNode still calls commitUndo after refactor
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN an existing RECTANGLE node
+WHEN handleModifyNode(nodeId, { name: "Test" }) is called
+THEN applyNodeModifications is called internally
+AND commitUndo IS called exactly once
+```
+
+```
+TEST-P10B-003: Existing modify_node MCP tool behavior unchanged after refactor
+Type: regression
+Priority: critical
+
+GIVEN the full MCP server with all tools registered
+WHEN the modify_node tool is listed
+THEN it has the same schema as before (nodeId + ModifyPropertiesSchema)
+AND the tool count remains 24
+```
+
+---
+
+## Phase 10C: batch_modify Tests
+
+```
+TEST-P10C-001: batch_modify MCP tool registers with correct schema
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 10 tools registered
+WHEN tools/list is called
+THEN a tool named "batch_modify" exists with parameter { modifications: array of { nodeId: string, properties: object } }
+```
+
+```
+TEST-P10C-002: batch_modify plugin handler applies modifications to multiple nodes
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN three RECTANGLE nodes with ids "1:1", "1:2", "1:3"
+WHEN handleBatchModify([
+  { nodeId: "1:1", properties: { name: "A" } },
+  { nodeId: "1:2", properties: { name: "B" } },
+  { nodeId: "1:3", properties: { name: "C" } },
+]) is called
+THEN all three nodes have their names updated
+AND commitUndo is called exactly ONCE (not three times)
+AND returns { succeeded: 3, failed: 0, total: 3, results: [...] }
+```
+
+```
+TEST-P10C-003: batch_modify continues on individual node failure
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN two valid nodes and one nonexistent node "999:0"
+WHEN handleBatchModify([
+  { nodeId: "1:1", properties: { name: "A" } },
+  { nodeId: "999:0", properties: { name: "X" } },
+  { nodeId: "1:2", properties: { name: "B" } },
+]) is called
+THEN the first and third modifications succeed
+AND the second fails with "Node not found: 999:0"
+AND returns { succeeded: 2, failed: 1, total: 3 }
+AND the operation does NOT throw (partial failure is not fatal)
+```
+
+```
+TEST-P10C-004: batch_modify requires at least 1 modification
+Type: unit
+Priority: high
+
+GIVEN an empty modifications array []
+WHEN batch_modify tool handler is invoked
+THEN Zod validation fails with min(1) error
+```
+
+```
+TEST-P10C-005: batch_modify includes warnings from warning system
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN a TEXT node "1:1" and a RECTANGLE node "1:2"
+WHEN handleBatchModify([
+  { nodeId: "1:1", properties: { layoutMode: "VERTICAL" } },
+  { nodeId: "1:2", properties: { fills: [{ type: "SOLID", color: "#FF0000" }] } },
+]) is called
+THEN the first modification result includes a [warning] about layoutMode on TEXT
+AND the second modification result has no warnings
+```
+
+```
+TEST-P10C-006: batch_modify Zod schema validates modifications array shape
+Type: unit
+Priority: high
+
+GIVEN { modifications: [{ nodeId: "1:1", properties: { name: "test" } }] }
+WHEN parsed by the batch_modify input schema
+THEN validation succeeds
+
+GIVEN { modifications: [{ properties: { name: "test" } }] }
+WHEN parsed (missing nodeId)
+THEN validation fails
+```
+
+```
+TEST-P10C-007: MCP server registers 26 tools after Phase 10 (24 + batch_modify + batch_get_node_info)
+Type: integration
+Priority: critical
+
+GIVEN a fresh MCP server with all Phase 10 tools registered
+WHEN tools/list is called
+THEN exactly 26 tools are returned
+```
+
+---
+
+## Phase 10D: batch_get_node_info Tests
+
+```
+TEST-P10D-001: batch_get_node_info MCP tool registers with correct schema
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 10 tools registered
+WHEN tools/list is called
+THEN a tool named "batch_get_node_info" exists with parameters { nodeIds: string[], depth?: number }
+```
+
+```
+TEST-P10D-002: batch_get_node_info returns multiple serialized nodes
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN three nodes with ids "1:1" (FRAME), "1:2" (TEXT), "1:3" (RECTANGLE)
+WHEN handleBatchGetNodeInfo(["1:1", "1:2", "1:3"], 1) is called
+THEN returns { nodes: [<serialized 1:1>, <serialized 1:2>, <serialized 1:3>], errors: [] }
+AND each serialized node includes id, name, type, and properties
+```
+
+```
+TEST-P10D-003: batch_get_node_info continues on individual node not found
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN valid node "1:1" and nonexistent node "999:0"
+WHEN handleBatchGetNodeInfo(["1:1", "999:0"], 1) is called
+THEN returns { nodes: [<serialized 1:1>], errors: ["Node not found: 999:0"] }
+AND does NOT throw
+```
+
+```
+TEST-P10D-004: batch_get_node_info requires at least 1 nodeId
+Type: unit
+Priority: high
+
+GIVEN an empty nodeIds array []
+WHEN batch_get_node_info tool handler is invoked
+THEN Zod validation fails with min(1) error
+```
+
+```
+TEST-P10D-005: batch_get_node_info respects depth parameter
+Type: integration (requires Figma API mock)
+Priority: medium
+
+GIVEN a FRAME node "1:1" with children
+WHEN handleBatchGetNodeInfo(["1:1"], 0) is called
+THEN the returned node has children as summaries only (id, name, type)
+
+WHEN handleBatchGetNodeInfo(["1:1"], 2) is called
+THEN the returned node has children with full properties up to 2 levels deep
+```
+
+```
+TEST-P10D-006: batch_get_node_info WS message type compiles
+Type: unit
+Priority: high
+
+GIVEN the ServerToPluginMessage type definition
+WHEN a message with type "batch_get_node_info" is constructed with { id: string, nodeIds: string[], depth?: number }
+THEN it compiles without TypeScript errors
+```
+
+---
+
 ## Non-Functional Tests (retained from v1.0)
 
 ```
@@ -586,8 +879,12 @@ THEN all 3 packages compile without errors
 | Phase 7B: Style Creation | TEST-P7B-001 through TEST-P7B-007 | 7 |
 | Phase 8: Image Fills | TEST-P8-001 through TEST-P8-009 | 9 |
 | Phase 9: Boolean Operations | TEST-P9-001 through TEST-P9-010 | 10 |
-| **TOTAL NEW** | | **46** |
-| **TOTAL (existing + new)** | | **88** |
+| Phase 10A: Warning System | TEST-P10A-001 through TEST-P10A-008 | 8 |
+| Phase 10B: Refactor | TEST-P10B-001 through TEST-P10B-003 | 3 |
+| Phase 10C: batch_modify | TEST-P10C-001 through TEST-P10C-007 | 7 |
+| Phase 10D: batch_get_node_info | TEST-P10D-001 through TEST-P10D-006 | 6 |
+| **TOTAL NEW (Phase 10)** | | **24** |
+| **TOTAL (all phases)** | | **112** |
 
 ---
 

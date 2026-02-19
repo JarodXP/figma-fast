@@ -84,7 +84,9 @@ export type ServerToPluginMessage =
       id: string;
       operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE';
       nodeIds: string[];
-    };
+    }
+  // Phase 10D: Batch Read
+  | { type: 'batch_get_node_info'; id: string; nodeIds: string[]; depth?: number };
 
 /** Messages sent from Figma plugin to MCP server */
 export type PluginToServerMessage =

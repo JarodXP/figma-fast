@@ -4,7 +4,7 @@
  * Extracted from build-scene.ts and edit-tools.ts to eliminate duplication.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ModifyPropertiesSchema = exports.SceneNodeSchema = exports.LineHeightSchema = exports.EffectSchema = exports.StrokeSchema = exports.FillSchema = void 0;
+exports.BatchModificationSchema = exports.ModifyPropertiesSchema = exports.SceneNodeSchema = exports.LineHeightSchema = exports.EffectSchema = exports.StrokeSchema = exports.FillSchema = void 0;
 const zod_1 = require("zod");
 // ─── Sub-Schemas ────────────────────────────────────────────────
 exports.FillSchema = zod_1.z.object({
@@ -178,4 +178,10 @@ exports.ModifyPropertiesSchema = zod_1.z
         .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
 })
     .describe('Properties to update on the node');
+// ─── Batch Schema ────────────────────────────────────────────────
+/** A single item in a batch_modify modifications array */
+exports.BatchModificationSchema = zod_1.z.object({
+    nodeId: zod_1.z.string().describe('The Figma node ID to modify'),
+    properties: exports.ModifyPropertiesSchema,
+});
 //# sourceMappingURL=schemas.js.map
