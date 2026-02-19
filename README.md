@@ -1,6 +1,6 @@
 # FigmaFast
 
-A high-performance MCP server for Figma. Build entire designs in a single tool call instead of dozens of individual operations.
+A high-performance MCP server for Figma. Build entire designs — complete with components, styles, images, and boolean shapes — in a single tool call instead of dozens of individual operations.
 
 ```
 Claude / AI  <--stdio-->  MCP Server  <--WebSocket-->  Figma Plugin
@@ -10,23 +10,73 @@ Claude / AI  <--stdio-->  MCP Server  <--WebSocket-->  Figma Plugin
 
 Traditional Figma MCP tools create nodes one at a time. A simple card with a title and subtitle takes 3+ tool calls. A dashboard with 50 elements takes 50+ calls.
 
-FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates everything in one call. A full dashboard in a single request. Combined with read tools for inspecting the canvas and edit tools for surgical changes, it gives AI assistants a complete Figma workflow.
+FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates everything in one call — frames, text, shapes, components, component sets with variants, images from URL, and style bindings. A full dashboard in a single request. Combined with read tools for inspecting the canvas, edit tools for surgical changes, style/page/component management tools, and boolean operations for custom shapes, it gives AI assistants a complete Figma design system workflow.
 
-### Tool Inventory
+### Tool Inventory (24 tools)
+
+#### Scene Building
 
 | Tool | Purpose |
 |------|---------|
-| `build_scene` | Create entire UI trees from a declarative spec (primary tool) |
+| `build_scene` | Create entire UI trees from a declarative spec — frames, text, shapes, components, component sets, images, and style bindings in one call |
+
+#### Reading & Inspecting
+
+| Tool | Purpose |
+|------|---------|
 | `get_document_info` | List pages, current page, top-level frames |
 | `get_node_info` | Read all properties of a node by ID |
 | `get_selection` | Get currently selected nodes |
 | `get_styles` | List local paint, text, and effect styles |
 | `get_local_components` | List local components with keys |
+| `get_library_components` | Search team library components via REST API |
 | `export_node_as_image` | Export a node as PNG, SVG, JPG, or PDF |
-| `modify_node` | Update properties of an existing node |
+
+#### Editing & Manipulation
+
+| Tool | Purpose |
+|------|---------|
+| `modify_node` | Update properties of an existing node (including style binding) |
 | `delete_nodes` | Delete nodes by ID |
 | `move_node` | Reposition or reparent a node |
 | `clone_node` | Duplicate a node |
+
+#### Components
+
+| Tool | Purpose |
+|------|---------|
+| `convert_to_component` | Convert an existing frame into a reusable component |
+| `combine_as_variants` | Combine components into a component set with variants |
+| `manage_component_properties` | Add, edit, or remove component properties |
+
+#### Styles
+
+| Tool | Purpose |
+|------|---------|
+| `create_paint_style` | Create a reusable paint style (color token) |
+| `create_text_style` | Create a reusable text style (typography token) |
+| `create_effect_style` | Create a reusable effect style (shadow/blur token) |
+
+#### Pages
+
+| Tool | Purpose |
+|------|---------|
+| `create_page` | Create a new page in the document |
+| `rename_page` | Rename an existing page |
+| `set_current_page` | Switch the active page |
+
+#### Images & Shapes
+
+| Tool | Purpose |
+|------|---------|
+| `set_image_fill` | Fill a node with an image from a URL |
+| `boolean_operation` | Combine shapes via UNION, SUBTRACT, INTERSECT, or EXCLUDE |
+
+#### Utility
+
+| Tool | Purpose |
+|------|---------|
+| `ping` | Health check — verify plugin connection |
 
 ## Quick Start
 
@@ -154,6 +204,24 @@ Change the title text to "Total Revenue" and make the number blue.
 
 Claude calls `modify_node` twice -- once for the text content, once for the fill color.
 
+### Build a design system
+
+```
+Create a design system page with color token styles: Primary/500 (#1A56DB),
+Neutral/100 (#F3F4F6), Neutral/900 (#111827). Then create a Button component set
+with Default and Disabled variants.
+```
+
+Claude calls `create_page` to set up the page, `create_paint_style` for each token, then `build_scene` with `COMPONENT_SET` and `COMPONENT` nodes — all with style bindings.
+
+### Add images
+
+```
+Add a hero image from Unsplash to the header frame, and set it to fill mode.
+```
+
+Claude calls `set_image_fill` with the URL. The MCP server downloads the image and sends it to the plugin as base64.
+
 ### Export for review
 
 ```
@@ -171,26 +239,37 @@ figma-fast/
 │   │   └── src/
 │   │       ├── scene-spec.ts    # SceneNode type (the core contract)
 │   │       ├── messages.ts      # WebSocket message protocol
-│   │       └── colors.ts        # Hex <-> RGBA conversion
+│   │       ├── colors.ts        # Hex <-> RGBA conversion
+│   │       └── fonts.ts         # Font style mapping & collection
 │   ├── mcp-server/          # MCP server + embedded WebSocket
 │   │   └── src/
 │   │       ├── index.ts         # Entry: stdio MCP + WS server
-│   │       ├── tools/           # MCP tool definitions
-│   │       │   ├── build-scene.ts
-│   │       │   ├── read-tools.ts
-│   │       │   └── edit-tools.ts
+│   │       ├── schemas.ts       # Shared Zod validation schemas
+│   │       ├── tools/           # MCP tool definitions (24 tools)
+│   │       │   ├── build-scene.ts    # Declarative scene builder
+│   │       │   ├── read-tools.ts     # 7 read/inspect tools
+│   │       │   ├── edit-tools.ts     # 4 edit/manipulation tools
+│   │       │   ├── component-tools.ts # 3 component lifecycle tools
+│   │       │   ├── style-tools.ts    # 3 style creation tools
+│   │       │   ├── page-tools.ts     # 3 page management tools
+│   │       │   ├── image-tools.ts    # Image fill from URL
+│   │       │   ├── boolean-tools.ts  # Boolean shape operations
+│   │       │   └── ping.ts          # Health check
 │   │       └── ws/server.ts     # WebSocket server
 │   └── figma-plugin/        # Figma plugin
 │       ├── manifest.json
 │       └── src/
 │           ├── main.ts          # Plugin main thread
 │           ├── ui.html          # UI iframe (WS client)
-│           ├── handlers.ts      # Read & edit handlers
+│           ├── handlers.ts      # All plugin-side handlers
 │           ├── serialize-node.ts
 │           └── scene-builder/   # Recursive scene builder
 │               ├── index.ts
 │               ├── build-node.ts
 │               └── fonts.ts
+├── vitest.config.ts         # Test configuration
+├── eslint.config.js         # Linting configuration
+├── .prettierrc              # Formatting configuration
 └── package.json             # npm workspaces root
 ```
 
@@ -198,8 +277,9 @@ figma-fast/
 
 1. **Claude** calls an MCP tool (e.g. `build_scene`) via stdio
 2. **MCP Server** validates params, sends a WebSocket message to the plugin
+   - For image fills, the server downloads images and sends base64-encoded data
 3. **Plugin UI** (iframe) receives the WS message, forwards to the main thread via `postMessage`
-4. **Plugin Main Thread** executes Figma API calls (create nodes, read properties, export)
+4. **Plugin Main Thread** executes Figma API calls (create nodes, read properties, export, apply images)
 5. **Response** flows back: main thread -> UI iframe -> WebSocket -> MCP server -> Claude
 
 All requests use a correlation ID for reliable request/response matching with configurable timeouts.
@@ -210,7 +290,7 @@ Every node in a `build_scene` tree has these properties:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `type` | `string` | **Required.** `FRAME`, `TEXT`, `RECTANGLE`, `ELLIPSE`, `GROUP`, `COMPONENT_INSTANCE`, `POLYGON`, `STAR`, `LINE`, `VECTOR` |
+| `type` | `string` | **Required.** `FRAME`, `TEXT`, `RECTANGLE`, `ELLIPSE`, `GROUP`, `COMPONENT`, `COMPONENT_SET`, `COMPONENT_INSTANCE`, `POLYGON`, `STAR`, `LINE`, `VECTOR` |
 | `id` | `string` | Client-assigned ID. Returned in `nodeIdMap` for follow-up references. |
 | `name` | `string` | Layer name in Figma |
 | `x`, `y` | `number` | Position |
@@ -223,9 +303,12 @@ Every node in a `build_scene` tree has these properties:
 | `clipsContent` | `boolean` | Whether frame clips children |
 | `visible` | `boolean` | Visibility |
 | `locked` | `boolean` | Lock state |
-| `children` | `SceneNode[]` | Child nodes (for FRAME, GROUP) |
+| `children` | `SceneNode[]` | Child nodes (for FRAME, GROUP, COMPONENT, COMPONENT_SET) |
+| `fillStyleId` | `string` | Bind a paint style to fills (from `get_styles`) |
+| `textStyleId` | `string` | Bind a text style (TEXT nodes only) |
+| `effectStyleId` | `string` | Bind an effect style |
 
-### Auto-Layout (on FRAME nodes)
+### Auto-Layout (on FRAME / COMPONENT nodes)
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -269,18 +352,125 @@ All colors are hex strings: `#RGB`, `#RRGGBB`, or `#RRGGBBAA`.
 "#00000019"   -- black at 10% opacity (good for subtle shadows)
 ```
 
+### Components & Variants
+
+Create reusable components directly in `build_scene`:
+
+```json
+{
+  "type": "COMPONENT_SET",
+  "name": "Button",
+  "children": [
+    {
+      "type": "COMPONENT",
+      "name": "State=Default, Size=md",
+      "layoutMode": "HORIZONTAL",
+      "padding": [12, 24, 12, 24],
+      "fills": [{"type": "SOLID", "color": "#1A56DB"}],
+      "cornerRadius": 8,
+      "children": [
+        {
+          "type": "TEXT",
+          "characters": "Button",
+          "fontSize": 14,
+          "fontWeight": 600,
+          "fills": [{"type": "SOLID", "color": "#FFFFFF"}]
+        }
+      ]
+    },
+    {
+      "type": "COMPONENT",
+      "name": "State=Disabled, Size=md",
+      "layoutMode": "HORIZONTAL",
+      "padding": [12, 24, 12, 24],
+      "fills": [{"type": "SOLID", "color": "#D1D5DB"}],
+      "cornerRadius": 8,
+      "children": [
+        {
+          "type": "TEXT",
+          "characters": "Button",
+          "fontSize": 14,
+          "fontWeight": 600,
+          "fills": [{"type": "SOLID", "color": "#6B7280"}]
+        }
+      ]
+    }
+  ]
+}
+```
+
+`COMPONENT` nodes support all the same properties as `FRAME` (auto-layout, fills, effects, children, etc.). Variant axes are parsed from the component name (e.g., `"State=Default, Size=md"`).
+
 ### Component Instances
 
 ```json
 {
   "type": "COMPONENT_INSTANCE",
   "componentKey": "abc123def...",
+  "overrides": {
+    "Label": "Submit Order",
+    "Icon#visible": false
+  },
   "x": 0,
   "y": 0
 }
 ```
 
-Get component keys with `get_local_components`.
+Get component keys with `get_local_components` or `get_library_components`. Use `overrides` to customize text content, visibility, and other properties of inner layers by name.
+
+### Style Binding
+
+Create styles with the `create_paint_style`, `create_text_style`, and `create_effect_style` tools, then bind them to nodes:
+
+```json
+{
+  "type": "FRAME",
+  "fillStyleId": "S:abc123...",
+  "children": [
+    {
+      "type": "TEXT",
+      "characters": "Dashboard",
+      "textStyleId": "S:def456..."
+    }
+  ]
+}
+```
+
+Style bindings work in both `build_scene` and `modify_node`. When a style is updated, all bound nodes update automatically.
+
+### Image Fills
+
+Add images to any node using a URL:
+
+```json
+{
+  "type": "FRAME",
+  "name": "Hero Image",
+  "width": 800,
+  "height": 400,
+  "cornerRadius": 12,
+  "clipsContent": true,
+  "fills": [
+    {
+      "type": "IMAGE",
+      "url": "https://images.unsplash.com/photo-abc...",
+      "scaleMode": "FILL"
+    }
+  ]
+}
+```
+
+Supported `scaleMode` values: `FILL`, `FIT`, `CROP`, `TILE`. Images can also be applied to existing nodes via the `set_image_fill` tool.
+
+### Boolean Operations
+
+Combine shapes into complex forms using the `boolean_operation` tool:
+
+```
+Combine nodeA and nodeB using SUBTRACT to create a cutout shape.
+```
+
+Supported operations: `UNION`, `SUBTRACT`, `INTERSECT`, `EXCLUDE`.
 
 ## Configuration
 
@@ -304,6 +494,15 @@ npm run build:server
 
 # Run MCP server in dev mode (auto-restart on changes)
 npm run dev
+
+# Run tests
+npm test
+
+# Lint
+npm run lint
+
+# Check formatting
+npm run format:check
 ```
 
 ### Build order

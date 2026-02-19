@@ -7,6 +7,54 @@ exports.registerBuildSceneTool = registerBuildSceneTool;
 const zod_1 = require("zod");
 const server_js_1 = require("../ws/server.js");
 const schemas_js_1 = require("../schemas.js");
+// ─── Image Pre-Download ────────────────────────────────────────
+const IMAGE_FETCH_TIMEOUT_MS = 30_000;
+/** Walk the scene tree and collect all distinct imageUrls from IMAGE fills */
+function collectImageUrls(spec) {
+    const urls = new Set();
+    if (spec.fills) {
+        for (const fill of spec.fills) {
+            if (fill.type === 'IMAGE' && fill.imageUrl) {
+                urls.add(fill.imageUrl);
+            }
+        }
+    }
+    if (spec.children) {
+        for (const child of spec.children) {
+            for (const url of collectImageUrls(child)) {
+                urls.add(url);
+            }
+        }
+    }
+    return urls;
+}
+/** Download image URLs in parallel, returning base64-encoded payloads */
+async function downloadImages(urls) {
+    const payloads = {};
+    await Promise.all(Array.from(urls).map(async (url) => {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    payloads[url] = Buffer.from(arrayBuffer).toString('base64');
+                }
+                else {
+                    console.error(`[FigmaFast] Failed to download image ${url}: HTTP ${response.status}`);
+                }
+            }
+            finally {
+                clearTimeout(timeoutId);
+            }
+        }
+        catch (err) {
+            console.error(`[FigmaFast] Failed to download image ${url}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }));
+    return payloads;
+}
 // ─── Tool Description ──────────────────────────────────────────
 const TOOL_DESCRIPTION = `Build an entire Figma design in a single call using a declarative scene specification.
 
@@ -78,6 +126,18 @@ Example 3 — Button:
 
 COMPONENTS: Use type "COMPONENT" to create reusable components (same properties as FRAME). Use type "COMPONENT_SET" to create variant groups — its children MUST all be type "COMPONENT" with variant names like "Property1=Value1, Property2=Value2".
 
+STYLE BINDING: Use get_styles first to discover style IDs, then bind them to nodes. Style IDs override individual fill/effect properties.
+
+Example 5 — Rectangle with bound paint style:
+{
+  "scene": {
+    "type": "RECTANGLE", "name": "Styled Box", "width": 200, "height": 100,
+    "fillStyleId": "S:abc123,1:1",
+    "effectStyleId": "S:def456,2:2",
+    "cornerRadius": 8
+  }
+}
+
 Example 4 — Button component with variants:
 {
   "scene": {
@@ -129,10 +189,14 @@ function registerBuildSceneTool(server) {
             };
         }
         try {
+            // Pre-download all IMAGE fills with imageUrls
+            const imageUrls = collectImageUrls(params.scene);
+            const imagePayloads = imageUrls.size > 0 ? await downloadImages(imageUrls) : undefined;
             const response = await (0, server_js_1.sendToPlugin)({
                 type: 'build_scene',
                 spec: params.scene,
                 parentId: params.parentNodeId,
+                ...(imagePayloads && Object.keys(imagePayloads).length > 0 ? { imagePayloads } : {}),
             }, 120_000);
             if (response.type === 'result') {
                 if (response.success) {

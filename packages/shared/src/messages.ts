@@ -3,7 +3,7 @@
  * All communication between MCP server and Figma plugin uses these types.
  */
 
-import type { SceneNode } from './scene-spec.js';
+import type { SceneNode, Fill, Effect, LineHeight, TextDecoration, TextCase } from './scene-spec.js';
 
 /** Modification to apply to an existing node */
 export interface Modification {
@@ -22,7 +22,14 @@ export interface ComponentPropertyDefinition {
 /** Messages sent from MCP server to Figma plugin */
 export type ServerToPluginMessage =
   | { type: 'ping'; id: string }
-  | { type: 'build_scene'; id: string; spec: SceneNode; parentId?: string }
+  | {
+      type: 'build_scene';
+      id: string;
+      spec: SceneNode;
+      parentId?: string;
+      /** Map of imageUrl -> base64 image data for IMAGE fills */
+      imagePayloads?: Record<string, string>;
+    }
   | { type: 'batch_modify'; id: string; modifications: Modification[] }
   | { type: 'read_node'; id: string; nodeId: string; depth?: number }
   | { type: 'get_document_info'; id: string }
@@ -43,6 +50,40 @@ export type ServerToPluginMessage =
       componentId: string;
       action: 'add' | 'update' | 'delete';
       properties: ComponentPropertyDefinition[];
+    }
+  // Phase 6: Page Management
+  | { type: 'create_page'; id: string; name: string }
+  | { type: 'rename_page'; id: string; pageId: string; name: string }
+  | { type: 'set_current_page'; id: string; pageId: string }
+  // Phase 7B: Style Creation
+  | { type: 'create_paint_style'; id: string; name: string; fills: Fill[] }
+  | {
+      type: 'create_text_style';
+      id: string;
+      name: string;
+      fontFamily?: string;
+      fontSize?: number;
+      fontWeight?: number | string;
+      lineHeight?: number | LineHeight;
+      letterSpacing?: number;
+      textDecoration?: TextDecoration;
+      textCase?: TextCase;
+    }
+  | { type: 'create_effect_style'; id: string; name: string; effects: Effect[] }
+  // Phase 8: Image Fills
+  | {
+      type: 'set_image_fill';
+      id: string;
+      nodeId: string;
+      imageData: string;
+      scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
+    }
+  // Phase 9: Boolean Operations
+  | {
+      type: 'boolean_operation';
+      id: string;
+      operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE';
+      nodeIds: string[];
     };
 
 /** Messages sent from Figma plugin to MCP server */

@@ -1,14 +1,12 @@
 # FigmaFast -- Test Specifications
 
-> **Version:** 1.0.0
+> **Version:** 2.0.0
 > **Last updated:** 2026-02-19
-> **Framework:** vitest (recommended -- zero-config TS, Zod-native, fast)
+> **Framework:** vitest ^4.0.18
 
 ---
 
-## Existing Tests
-
-**42 tests across 5 test files. All passing as of 2026-02-19.**
+## Existing Tests (Phase 5.5 -- All Passing)
 
 | File | Tests | Status |
 |------|-------|--------|
@@ -17,380 +15,521 @@
 | `packages/mcp-server/src/__tests__/schemas.test.ts` | 20 | PASSING |
 | `packages/mcp-server/src/__tests__/server.test.ts` | 1 | PASSING |
 | `packages/mcp-server/src/__tests__/ws-server.test.ts` | 2 | PASSING |
+| **TOTAL** | **42** | **ALL PASSING** |
 
 ---
 
-## Coverage Gaps
+## Phase 6: Page Management Tests
 
-| Area | Current Coverage | Priority | Notes |
-|------|-----------------|----------|-------|
-| `packages/shared/src/colors.ts` | 0% | CRITICAL | Pure functions, trivially testable |
-| `packages/shared/src/scene-spec.ts` | 0% (types only) | N/A | TypeScript types -- validated by compiler |
-| `packages/shared/src/messages.ts` | 0% (types only) | N/A | TypeScript types -- validated by compiler |
-| `packages/mcp-server/src/tools/build-scene.ts` (Zod schemas) | 0% | CRITICAL | Recursive schema with edge cases |
-| `packages/mcp-server/src/tools/edit-tools.ts` (Zod schemas) | 0% | HIGH | Duplicate schemas, must stay in sync |
-| `packages/mcp-server/src/ws/server.ts` | 0% | MEDIUM | Network code, harder to unit test |
-| `packages/mcp-server/src/tools/*.ts` (tool handlers) | 0% | MEDIUM | Depend on WS connection, need mocking |
-| `packages/figma-plugin/src/scene-builder/fonts.ts` | 0% | HIGH | Pure logic (collectFonts, getFontStyle) |
-| `packages/figma-plugin/src/scene-builder/build-node.ts` | 0% | LOW | Depends on Figma API, needs sandbox mock |
-| `packages/figma-plugin/src/handlers.ts` | 0% | LOW | Depends on Figma API |
-| `packages/figma-plugin/src/serialize-node.ts` | 0% | LOW | Depends on Figma API |
+```
+TEST-P6-001: create_page MCP tool registers with correct schema
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with all tools registered
+WHEN tools/list is called
+THEN a tool named "create_page" exists with parameter schema { name: string }
+```
+
+```
+TEST-P6-002: create_page handler creates a page with given name
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a Figma document with 1 page ("Page 1")
+WHEN handleCreatePage("My New Page") is called
+THEN figma.createPage() is invoked AND the new page's name is set to "My New Page"
+AND the handler returns { id: <string>, name: "My New Page" }
+```
+
+```
+TEST-P6-003: rename_page MCP tool registers with correct schema
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with all tools registered
+WHEN tools/list is called
+THEN a tool named "rename_page" exists with parameters { pageId: string, name: string }
+```
+
+```
+TEST-P6-004: rename_page handler renames an existing page
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a page with id "0:1" and name "Old Name"
+WHEN handleRenamePage("0:1", "New Name") is called
+THEN the page's name is set to "New Name"
+AND the handler returns { id: "0:1", name: "New Name", oldName: "Old Name" }
+```
+
+```
+TEST-P6-005: rename_page handler throws for nonexistent page
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN no page with id "999:0"
+WHEN handleRenamePage("999:0", "Any") is called
+THEN it throws an error containing "not found"
+```
+
+```
+TEST-P6-006: set_current_page MCP tool registers with correct schema
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with all tools registered
+WHEN tools/list is called
+THEN a tool named "set_current_page" exists with parameter { pageId: string }
+```
+
+```
+TEST-P6-007: set_current_page handler switches to target page
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN pages ["0:1" (Page 1), "0:2" (Page 2)] with currentPage = "0:1"
+WHEN handleSetCurrentPage("0:2") is called
+THEN figma.setCurrentPageAsync is called with the page node for "0:2"
+AND the handler returns { id: "0:2", name: "Page 2" }
+```
+
+```
+TEST-P6-008: set_current_page handler throws for nonexistent page
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN no page with id "999:0"
+WHEN handleSetCurrentPage("999:0") is called
+THEN it throws an error containing "not found"
+```
+
+```
+TEST-P6-009: Page management WS message types are in ServerToPluginMessage
+Type: unit
+Priority: high
+
+GIVEN the ServerToPluginMessage type definition
+WHEN a message with type "create_page" is constructed with { id: string, name: string }
+AND a message with type "rename_page" is constructed with { id: string, pageId: string, name: string }
+AND a message with type "set_current_page" is constructed with { id: string, pageId: string }
+THEN all three compile without TypeScript errors
+```
+
+```
+TEST-P6-010: MCP server registers all 19 tools after Phase 6
+Type: integration
+Priority: critical
+
+GIVEN a fresh MCP server with all Phase 6 tools registered
+WHEN tools/list is called
+THEN exactly 19 tools are returned (16 existing + 3 page tools)
+```
 
 ---
 
-## Regression Scope
-
-Since there are no existing tests, the initial test suite IS the regression suite. All tests below must pass before any new feature work begins.
-
----
-
-## New Functional Tests
-
-### Color Utilities (`packages/shared/src/colors.ts`)
+## Phase 7A: Style Binding Tests
 
 ```
-TEST-001: hexToRgba parses 6-digit hex correctly
+TEST-P7A-001: SceneNodeSchema accepts fillStyleId field
 Type: unit
 Priority: critical
 
-GIVEN a standard 6-digit hex color "#FF8800"
-WHEN hexToRgba is called
-THEN it returns { r: 1, g: 0.533..., b: 0, a: 1 }
+GIVEN { type: "RECTANGLE", fillStyleId: "S:abc123,1:1" }
+WHEN parsed by SceneNodeSchema
+THEN validation succeeds AND the fillStyleId value is preserved
 ```
 
 ```
-TEST-002: hexToRgba parses 3-digit shorthand hex
+TEST-P7A-002: SceneNodeSchema accepts textStyleId field
 Type: unit
 Priority: critical
 
-GIVEN a 3-digit hex color "#F80"
-WHEN hexToRgba is called
-THEN it returns { r: 1, g: 0.533..., b: 0, a: 1 } (same as #FF8800)
-```
-
-```
-TEST-003: hexToRgba parses 8-digit hex with alpha
-Type: unit
-Priority: critical
-
-GIVEN an 8-digit hex color "#FF000080"
-WHEN hexToRgba is called
-THEN it returns { r: 1, g: 0, b: 0, a: 0.502... } (128/255)
-```
-
-```
-TEST-004: hexToRgba handles # prefix presence/absence
-Type: unit
-Priority: high
-
-GIVEN hex colors "#FF0000" and "FF0000" (without hash)
-WHEN hexToRgba is called on both
-THEN both return identical { r: 1, g: 0, b: 0, a: 1 }
-```
-
-```
-TEST-005: hexToRgba handles black and white
-Type: unit
-Priority: high
-
-GIVEN "#000000" and "#FFFFFF"
-WHEN hexToRgba is called on each
-THEN black returns { r: 0, g: 0, b: 0, a: 1 } and white returns { r: 1, g: 1, b: 1, a: 1 }
-```
-
-```
-TEST-006: hexToRgba handles full transparency
-Type: unit
-Priority: high
-
-GIVEN "#00000000"
-WHEN hexToRgba is called
-THEN it returns { r: 0, g: 0, b: 0, a: 0 }
-```
-
-```
-TEST-007: rgbaToHex converts opaque color correctly
-Type: unit
-Priority: critical
-
-GIVEN { r: 1, g: 0, b: 0, a: 1 }
-WHEN rgbaToHex is called
-THEN it returns "#ff0000" (no alpha suffix since fully opaque)
-```
-
-```
-TEST-008: rgbaToHex includes alpha when not fully opaque
-Type: unit
-Priority: critical
-
-GIVEN { r: 0, g: 0, b: 0, a: 0.5 }
-WHEN rgbaToHex is called
-THEN it returns "#00000080" (alpha = 128/255 ~ 0x80)
-```
-
-```
-TEST-009: hexToRgba and rgbaToHex roundtrip
-Type: unit
-Priority: high
-
-GIVEN any valid hex color (e.g., "#3A7BF2")
-WHEN hexToRgba then rgbaToHex is called
-THEN the output equals the input (case-insensitive)
-```
-
-```
-TEST-010: hexToRgba boundary values
-Type: unit
-Priority: medium
-
-GIVEN edge case hex values "#000", "#FFF", "#00000000", "#FFFFFFFF"
-WHEN hexToRgba is called on each
-THEN values are within [0, 1] range for all components
-```
-
-### Font Utilities (`packages/figma-plugin/src/scene-builder/fonts.ts`)
-
-Note: These test the pure logic functions. preloadFonts depends on Figma API and cannot be unit tested without mocking.
-
-```
-TEST-011: getFontStyle maps numeric weights to style names
-Type: unit
-Priority: critical
-
-GIVEN each numeric weight: 100, 200, 300, 400, 500, 600, 700, 800, 900
-WHEN getFontStyle is called
-THEN it returns: Thin, Extra Light, Light, Regular, Medium, Semi Bold, Bold, Extra Bold, Black respectively
-```
-
-```
-TEST-012: getFontStyle returns Regular for undefined/unknown weight
-Type: unit
-Priority: high
-
-GIVEN undefined or an unmapped number (e.g., 450, 0, -1)
-WHEN getFontStyle is called
-THEN it returns "Regular"
-```
-
-```
-TEST-013: getFontStyle passes through string values
-Type: unit
-Priority: high
-
-GIVEN a string weight like "Bold Italic" or "Light"
-WHEN getFontStyle is called
-THEN it returns the string as-is
-```
-
-```
-TEST-014: collectFonts returns unique font refs from TEXT nodes
-Type: unit
-Priority: critical
-
-GIVEN a spec tree with 3 TEXT nodes: {fontFamily: "Roboto", fontWeight: 700}, {fontFamily: "Inter"}, {fontFamily: "Roboto", fontWeight: 700}
-WHEN collectFonts is called
-THEN it returns 3 entries: {Roboto, Bold}, {Inter, Regular}, and the fallback {Inter, Regular} (deduplicated, so 2 unique)
-```
-
-```
-TEST-015: collectFonts always includes Inter Regular fallback
-Type: unit
-Priority: high
-
-GIVEN a spec tree with only one TEXT node using {fontFamily: "Roboto", fontWeight: 400}
-WHEN collectFonts is called
-THEN the result includes both {Roboto, Regular} AND {Inter, Regular}
-```
-
-```
-TEST-016: collectFonts handles spec with no TEXT nodes
-Type: unit
-Priority: high
-
-GIVEN a spec tree containing only FRAME and RECTANGLE nodes
-WHEN collectFonts is called
-THEN it returns at least [{Inter, Regular}] (the fallback)
-```
-
-```
-TEST-017: collectFonts walks nested children
-Type: unit
-Priority: critical
-
-GIVEN a spec: FRAME > FRAME > TEXT {fontFamily: "Mono", fontWeight: 300}
-WHEN collectFonts is called
-THEN it includes {Mono, Light} in the result
-```
-
-### Zod Schema Validation (`packages/mcp-server/src/tools/build-scene.ts`)
-
-Note: These require importing the Zod schemas. If they are not exported, the first task is to export them for testability.
-
-```
-TEST-018: SceneNodeSchema accepts minimal valid FRAME
-Type: unit
-Priority: critical
-
-GIVEN { type: "FRAME" }
+GIVEN { type: "TEXT", characters: "Hello", textStyleId: "S:def456,2:2" }
 WHEN parsed by SceneNodeSchema
 THEN validation succeeds
 ```
 
 ```
-TEST-019: SceneNodeSchema rejects missing type
+TEST-P7A-003: SceneNodeSchema accepts effectStyleId field
 Type: unit
 Priority: critical
 
-GIVEN { name: "Card" } (no type field)
-WHEN parsed by SceneNodeSchema
-THEN validation fails with a meaningful error
-```
-
-```
-TEST-020: SceneNodeSchema rejects invalid type
-Type: unit
-Priority: critical
-
-GIVEN { type: "BUTTON" }
-WHEN parsed by SceneNodeSchema
-THEN validation fails (BUTTON is not a valid NodeType)
-```
-
-```
-TEST-021: SceneNodeSchema accepts full TEXT node
-Type: unit
-Priority: high
-
-GIVEN {
-  type: "TEXT",
-  characters: "Hello",
-  fontSize: 16,
-  fontFamily: "Inter",
-  fontWeight: 700,
-  textAlignHorizontal: "CENTER",
-  textAutoResize: "WIDTH_AND_HEIGHT",
-  fills: [{ type: "SOLID", color: "#000000" }]
-}
+GIVEN { type: "FRAME", effectStyleId: "S:ghi789,3:3" }
 WHEN parsed by SceneNodeSchema
 THEN validation succeeds
 ```
 
 ```
-TEST-022: SceneNodeSchema accepts nested children recursively
+TEST-P7A-004: ModifyPropertiesSchema accepts style ID fields
 Type: unit
 Priority: critical
 
-GIVEN a FRAME with children containing another FRAME with TEXT children
-WHEN parsed by SceneNodeSchema
-THEN validation succeeds at all nesting levels
+GIVEN { fillStyleId: "S:abc,1:1", textStyleId: "S:def,2:2", effectStyleId: "S:ghi,3:3" }
+WHEN parsed by ModifyPropertiesSchema
+THEN validation succeeds for all three fields
 ```
 
 ```
-TEST-023: SceneNodeSchema validates fill types
+TEST-P7A-005: Style binding in build_scene applies fillStyleId
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a RECTANGLE spec with fillStyleId: "S:abc,1:1" and NO fills array
+WHEN buildNode is called
+THEN node.fillStyleId is set to "S:abc,1:1" AND fills are NOT manually applied
+```
+
+```
+TEST-P7A-006: Style binding in build_scene applies textStyleId
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a TEXT spec with textStyleId: "S:def,2:2" and characters: "Hello"
+WHEN buildNode is called
+THEN node.textStyleId is set to "S:def,2:2"
+```
+
+```
+TEST-P7A-007: Style binding in build_scene applies effectStyleId
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a FRAME spec with effectStyleId: "S:ghi,3:3"
+WHEN buildNode is called
+THEN node.effectStyleId is set to "S:ghi,3:3"
+```
+
+```
+TEST-P7A-008: Style binding in modify_node applies style IDs
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN an existing RECTANGLE node
+WHEN handleModifyNode is called with { fillStyleId: "S:abc,1:1" }
+THEN the node's fillStyleId is set
+```
+
+```
+TEST-P7A-009: fillStyleId takes precedence over fills array
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN a spec with BOTH fillStyleId and fills
+WHEN buildNode is called
+THEN fillStyleId is applied AND the explicit fills array is ignored (style wins)
+```
+
+```
+TEST-P7A-010: get_styles returns style IDs usable for binding
+Type: integration (requires Figma API mock)
+Priority: medium
+
+GIVEN a file with paint style "Primary Blue" (id "S:abc,1:1")
+WHEN handleGetStyles is called
+THEN the returned paintStyles array includes { id: "S:abc,1:1", name: "Primary Blue", ... }
+AND this ID can be used as a fillStyleId value
+```
+
+---
+
+## Phase 7B: Style Creation Tests
+
+```
+TEST-P7B-001: create_paint_style MCP tool registers correctly
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 7B tools registered
+WHEN tools/list is called
+THEN "create_paint_style" exists with parameters { name: string, fills: Fill[] }
+```
+
+```
+TEST-P7B-002: create_paint_style handler creates a paint style
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN no paint styles exist
+WHEN handleCreatePaintStyle("Primary Blue", [{ type: "SOLID", color: "#2563EB" }]) is called
+THEN figma.createPaintStyle() is invoked
+AND style.name is set to "Primary Blue"
+AND style.paints includes a SOLID paint with the correct RGB values
+AND returns { id: <string>, name: "Primary Blue", key: <string> }
+```
+
+```
+TEST-P7B-003: create_text_style MCP tool registers correctly
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 7B tools registered
+WHEN tools/list is called
+THEN "create_text_style" exists with parameters { name, fontFamily?, fontSize?, fontWeight?, lineHeight?, letterSpacing?, textDecoration?, textCase? }
+```
+
+```
+TEST-P7B-004: create_text_style handler creates a text style
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN no text styles exist
+WHEN handleCreateTextStyle("Heading 1", { fontFamily: "Inter", fontSize: 32, fontWeight: 700 }) is called
+THEN figma.createTextStyle() is invoked
+AND style.fontName is set to { family: "Inter", style: "Bold" }
+AND style.fontSize is set to 32
+AND returns { id: <string>, name: "Heading 1", key: <string> }
+```
+
+```
+TEST-P7B-005: create_effect_style MCP tool registers correctly
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 7B tools registered
+WHEN tools/list is called
+THEN "create_effect_style" exists with parameters { name: string, effects: Effect[] }
+```
+
+```
+TEST-P7B-006: create_effect_style handler creates an effect style
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN no effect styles exist
+WHEN handleCreateEffectStyle("Card Shadow", [{ type: "DROP_SHADOW", color: "#00000026", offset: { x: 0, y: 2 }, radius: 8 }]) is called
+THEN figma.createEffectStyle() is invoked
+AND style.effects includes a DROP_SHADOW with correct values
+AND returns { id: <string>, name: "Card Shadow", key: <string> }
+```
+
+```
+TEST-P7B-007: MCP server registers all 22 tools after Phase 7B
+Type: integration
+Priority: critical
+
+GIVEN a fresh MCP server with all Phase 7B tools registered
+WHEN tools/list is called
+THEN exactly 22 tools are returned (19 after P6 + 3 style creation tools)
+```
+
+---
+
+## Phase 8: Image Fill Tests
+
+```
+TEST-P8-001: set_image_fill MCP tool registers correctly
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 8 tools registered
+WHEN tools/list is called
+THEN "set_image_fill" exists with parameters { nodeId: string, imageUrl: string, scaleMode?: enum }
+```
+
+```
+TEST-P8-002: set_image_fill downloads image from URL on MCP server
+Type: integration
+Priority: critical
+
+GIVEN a valid image URL returning a 1x1 PNG
+WHEN the set_image_fill tool handler is invoked
+THEN the MCP server fetches the URL
+AND the response bytes are base64-encoded
+AND sent to the plugin via WS as { type: "set_image_fill", nodeId, imageData: <base64>, scaleMode }
+```
+
+```
+TEST-P8-003: set_image_fill handler rejects invalid URL
 Type: unit
 Priority: high
 
-GIVEN fills with type "INVALID_FILL"
-WHEN parsed by SceneNodeSchema
-THEN validation fails
+GIVEN an imageUrl that is not a valid URL (e.g., "not-a-url")
+WHEN the set_image_fill tool handler is invoked
+THEN it returns an error without attempting fetch
 ```
 
 ```
-TEST-024: SceneNodeSchema accepts all 12 node types
-Type: unit
+TEST-P8-004: set_image_fill handler rejects on fetch timeout
+Type: integration
 Priority: high
 
-GIVEN each of: FRAME, TEXT, RECTANGLE, ELLIPSE, GROUP, COMPONENT, COMPONENT_SET, COMPONENT_INSTANCE, POLYGON, STAR, LINE, VECTOR
-WHEN parsed as { type: <nodeType> }
-THEN all 12 pass validation
+GIVEN a URL that does not respond within 30 seconds
+WHEN the set_image_fill tool handler is invoked
+THEN it returns a timeout error
 ```
 
 ```
-TEST-025: SceneNodeSchema validates cornerRadius as number or 4-tuple
+TEST-P8-005: Plugin handler applies image fill to node
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN a RECTANGLE node and base64 image data
+WHEN handleSetImageFill(nodeId, imageData, "FILL") is called in the plugin
+THEN figma.createImage(bytes) is called
+AND the node's fills are set to [{ type: "IMAGE", imageHash: image.hash, scaleMode: "FILL" }]
+```
+
+```
+TEST-P8-006: IMAGE fill type in build_scene with imageUrl
+Type: integration
+Priority: critical
+
+GIVEN a scene spec: { type: "RECTANGLE", width: 200, height: 200, fills: [{ type: "IMAGE", imageUrl: "https://example.com/photo.png", scaleMode: "FILL" }] }
+WHEN build_scene is invoked
+THEN the MCP server downloads the image before sending to plugin
+AND the plugin creates the image and applies it as a fill
+```
+
+```
+TEST-P8-007: IMAGE fill with invalid URL falls back to placeholder
+Type: integration
+Priority: high
+
+GIVEN a scene spec with fills: [{ type: "IMAGE", imageUrl: "https://nonexistent.invalid/img.png" }]
+WHEN build_scene is invoked
+THEN the node is created with a gray placeholder fill
+AND an error is added to the errors array
+```
+
+```
+TEST-P8-008: SceneNodeSchema FillSchema accepts imageUrl field
 Type: unit
-Priority: medium
+Priority: critical
 
-GIVEN cornerRadius: 8 (number) and cornerRadius: [8, 8, 0, 0] (tuple)
-WHEN parsed by SceneNodeSchema
-THEN both pass validation
-
-GIVEN cornerRadius: [8, 8] (2-tuple) or cornerRadius: "8px" (string)
-WHEN parsed by SceneNodeSchema
-THEN both fail validation
-```
-
-```
-TEST-026: SceneNodeSchema validates padding as number or 4-tuple
-Type: unit
-Priority: medium
-
-GIVEN padding: 16 (number) and padding: [16, 24, 16, 24] (tuple)
-WHEN parsed by SceneNodeSchema
-THEN both pass validation
-
-GIVEN padding: [16, 24] (2-tuple)
-WHEN parsed by SceneNodeSchema
-THEN validation fails
-```
-
-```
-TEST-027: SceneNodeSchema validates opacity range
-Type: unit
-Priority: medium
-
-GIVEN opacity: 0 and opacity: 1 and opacity: 0.5
-WHEN parsed by SceneNodeSchema
-THEN all pass
-
-GIVEN opacity: -0.1 or opacity: 1.5
-WHEN parsed by SceneNodeSchema
-THEN both fail
-```
-
-```
-TEST-028: FillSchema validates gradient stops
-Type: unit
-Priority: medium
-
-GIVEN { type: "GRADIENT_LINEAR", gradientStops: [{ position: 0, color: "#FF0000" }, { position: 1, color: "#0000FF" }] }
+GIVEN { type: "IMAGE", imageUrl: "https://example.com/photo.png", scaleMode: "FILL" }
 WHEN parsed by FillSchema
 THEN validation succeeds
 ```
 
 ```
-TEST-029: EffectSchema validates all effect types
-Type: unit
-Priority: medium
+TEST-P8-009: MCP server registers all 23 tools after Phase 8
+Type: integration
+Priority: critical
 
-GIVEN each of: DROP_SHADOW, INNER_SHADOW, LAYER_BLUR, BACKGROUND_BLUR with required radius field
-WHEN parsed by EffectSchema
-THEN all pass validation
-```
-
-### Schema Sync Between build-scene.ts and edit-tools.ts
-
-```
-TEST-030: ModifyPropertiesSchema accepts all properties that build-scene SceneNodeSchema accepts
-Type: unit
-Priority: high
-
-GIVEN a set of common property names (fills, strokes, effects, cornerRadius, layoutMode, characters, fontSize, etc.)
-WHEN checked against both SceneNodeSchema and ModifyPropertiesSchema
-THEN both schemas accept the same property shapes for shared properties
+GIVEN a fresh MCP server with all Phase 8 tools registered
+WHEN tools/list is called
+THEN exactly 23 tools are returned (22 after P7B + 1 image tool)
 ```
 
 ---
 
-## Non-Functional Tests
+## Phase 9: Boolean Operations Tests
 
 ```
-TEST-NF-001: MCP server starts and registers all 16 tools
+TEST-P9-001: boolean_operation MCP tool registers correctly
+Type: unit
+Priority: critical
+
+GIVEN the MCP server with Phase 9 tools registered
+WHEN tools/list is called
+THEN "boolean_operation" exists with parameters { operation: enum, nodeIds: string[] }
+```
+
+```
+TEST-P9-002: boolean_operation validates operation type
+Type: unit
+Priority: critical
+
+GIVEN operation: "INVALID_OP"
+WHEN boolean_operation tool handler is invoked
+THEN Zod validation fails with an error about the operation enum
+```
+
+```
+TEST-P9-003: boolean_operation requires at least 2 node IDs
+Type: unit
+Priority: high
+
+GIVEN operation: "UNION" and nodeIds: ["123:1"]
+WHEN boolean_operation tool handler is invoked
+THEN Zod validation fails (min 2 nodes required)
+```
+
+```
+TEST-P9-004: Plugin handler executes UNION operation
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN two RECTANGLE nodes with ids "1:1" and "1:2"
+WHEN handleBooleanOperation("UNION", ["1:1", "1:2"]) is called
+THEN figma.union([node1, node2], parent) is called
+AND returns { resultNodeId: <string>, operation: "UNION", inputCount: 2 }
+```
+
+```
+TEST-P9-005: Plugin handler executes SUBTRACT operation
+Type: integration (requires Figma API mock)
+Priority: critical
+
+GIVEN two RECTANGLE nodes
+WHEN handleBooleanOperation("SUBTRACT", [nodeId1, nodeId2]) is called
+THEN figma.subtract([node1, node2], parent) is called
+```
+
+```
+TEST-P9-006: Plugin handler executes INTERSECT operation
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN two ELLIPSE nodes
+WHEN handleBooleanOperation("INTERSECT", [nodeId1, nodeId2]) is called
+THEN figma.intersect([node1, node2], parent) is called
+```
+
+```
+TEST-P9-007: Plugin handler executes EXCLUDE operation
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN two RECTANGLE nodes
+WHEN handleBooleanOperation("EXCLUDE", [nodeId1, nodeId2]) is called
+THEN figma.exclude([node1, node2], parent) is called
+```
+
+```
+TEST-P9-008: boolean_operation fails if nodes not found
+Type: integration (requires Figma API mock)
+Priority: high
+
+GIVEN nodeIds referencing nonexistent nodes
+WHEN handleBooleanOperation("UNION", ["999:1", "999:2"]) is called
+THEN it throws an error containing "not found"
+```
+
+```
+TEST-P9-009: boolean_operation fails if nodes have different parents
+Type: integration (requires Figma API mock)
+Priority: medium
+
+GIVEN two nodes with different parents
+WHEN handleBooleanOperation("UNION", [nodeId1, nodeId2]) is called
+THEN it throws an error about requiring the same parent
+```
+
+```
+TEST-P9-010: MCP server registers all 24 tools after Phase 9
 Type: integration
 Priority: critical
 
+GIVEN a fresh MCP server with all Phase 9 tools registered
+WHEN tools/list is called
+THEN exactly 24 tools are returned (23 after P8 + 1 boolean tool)
+```
+
+---
+
+## Non-Functional Tests (retained from v1.0)
+
+```
+TEST-NF-001: MCP server starts and registers all tools
+Type: integration
+Priority: critical
+NOTE: Update expected count as new tools are added per phase.
+
 GIVEN a fresh MCP server process started via stdio
 WHEN an initialize request followed by tools/list is sent
-THEN the response includes exactly 16 tools with correct names
+THEN the response includes the expected tool count with correct names
 ```
 
 ```
@@ -425,32 +564,38 @@ THEN all 3 packages compile without errors
 
 ---
 
+## Coverage Gaps (to address incrementally)
+
+| Area | Current Coverage | Priority | Phase to Address |
+|------|-----------------|----------|-----------------|
+| Plugin handlers (handlers.ts) | 0% | MEDIUM | Requires Figma mock -- defer |
+| Plugin build-node.ts | 0% | LOW | Requires Figma mock -- defer |
+| Plugin serialize-node.ts | 0% | LOW | Requires Figma mock -- defer |
+| MCP tool handler boilerplate | 0% | LOW | Mostly WS relay code, low value |
+| WS server full lifecycle | Partial (2 tests) | MEDIUM | Add in Phase 6 if time allows |
+
+---
+
 ## Test Categories Summary
 
-| Work Type | Test IDs | Count |
-|-----------|----------|-------|
-| Color utilities | TEST-001 through TEST-010 | 10 |
-| Font utilities | TEST-011 through TEST-017 | 7 |
-| Zod schema validation | TEST-018 through TEST-030 | 13 |
-| Non-functional | TEST-NF-001 through TEST-NF-004 | 4 |
-| **TOTAL** | | **34** |
+| Phase | Test IDs | Count |
+|-------|----------|-------|
+| Phase 5.5 (existing) | TEST-001 through TEST-030, TEST-NF-001 through TEST-NF-004 | 34 spec, 42 actual |
+| Phase 6: Page Management | TEST-P6-001 through TEST-P6-010 | 10 |
+| Phase 7A: Style Binding | TEST-P7A-001 through TEST-P7A-010 | 10 |
+| Phase 7B: Style Creation | TEST-P7B-001 through TEST-P7B-007 | 7 |
+| Phase 8: Image Fills | TEST-P8-001 through TEST-P8-009 | 9 |
+| Phase 9: Boolean Operations | TEST-P9-001 through TEST-P9-010 | 10 |
+| **TOTAL NEW** | | **46** |
+| **TOTAL (existing + new)** | | **88** |
 
 ---
 
 ## Test Infrastructure Requirements
 
-1. **Framework:** vitest (recommended for TS monorepo, fast, native ESM)
-2. **Config:** `vitest.config.ts` at workspace root or per-package
-3. **Coverage:** `@vitest/coverage-v8`
-4. **Test location:** `packages/<pkg>/src/__tests__/<file>.test.ts` (colocated)
-5. **Script:** `"test": "vitest run"` in root package.json
-6. **CI gate:** Tests must pass before any merge to main
-
-### Testability Gaps
-
-The following require code changes before they can be tested:
-
-1. **Zod schemas in build-scene.ts are NOT exported.** They need to be exported (or extracted to a shared schemas file) for direct testing.
-2. **Zod schemas are DUPLICATED** between `build-scene.ts` and `edit-tools.ts`. Extract to a shared `schemas.ts` file.
-3. **Plugin code depends on Figma globals** (`figma.*`). Cannot be unit tested without a mock. Plugin tests should be deferred or limited to pure logic extraction.
-4. **WS server uses module-level state** (`pluginSocket`, `pendingRequests`). Testing requires either dependency injection or module-level mocking.
+1. **Framework:** vitest ^4.0.18 (already installed)
+2. **Config:** `vitest.config.ts` at workspace root (already exists)
+3. **Test location:** `packages/<pkg>/src/__tests__/<file>.test.ts` (established convention)
+4. **Script:** `"test": "vitest run"` in root package.json (already exists)
+5. **New dependency needed for Phase 8:** None -- Node.js native `fetch` (available in Node >= 18)
+6. **Figma API mocks:** For integration tests that reference Figma globals, these tests are SPEC ONLY until a Figma mock layer is added. Unit tests (schema validation, tool registration, message types) can be implemented immediately.

@@ -16,6 +16,7 @@ export interface Fill {
     gradientStops?: GradientStop[];
     gradientTransform?: [[number, number, number], [number, number, number]];
     imageRef?: string;
+    imageUrl?: string;
     scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
 }
 export type StrokeAlign = 'INSIDE' | 'OUTSIDE' | 'CENTER';
@@ -92,6 +93,12 @@ export interface SceneNode {
     overrides?: Record<string, string | boolean>;
     swapComponent?: string;
     componentDescription?: string;
+    /** Figma paint style ID to bind (from get_styles). Overrides fills array if set. */
+    fillStyleId?: string;
+    /** Figma text style ID to bind (from get_styles). Sets font, size, etc. */
+    textStyleId?: string;
+    /** Figma effect style ID to bind (from get_styles). Overrides effects array if set. */
+    effectStyleId?: string;
     children?: SceneNode[];
     visible?: boolean;
     locked?: boolean;

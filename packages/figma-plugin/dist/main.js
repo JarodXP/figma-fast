@@ -51,9 +51,9 @@
     "../shared/dist/colors.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
-      exports.hexToRgba = hexToRgba2;
+      exports.hexToRgba = hexToRgba3;
       exports.rgbaToHex = rgbaToHex3;
-      function hexToRgba2(hex) {
+      function hexToRgba3(hex) {
         let h = hex.replace("#", "");
         if (h.length === 3) {
           h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
@@ -183,6 +183,22 @@
 
   // src/scene-builder/build-node.ts
   var import_shared2 = __toESM(require_dist());
+  var _BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  function _base64Decode(str) {
+    const cleaned = str.replace(/[^A-Za-z0-9+/]/g, "");
+    const len = cleaned.length;
+    const bytes = [];
+    for (let i = 0; i < len; i += 4) {
+      const c1 = _BASE64_CHARS.indexOf(cleaned[i]);
+      const c2 = _BASE64_CHARS.indexOf(cleaned[i + 1]);
+      const c3 = i + 2 < len ? _BASE64_CHARS.indexOf(cleaned[i + 2]) : 0;
+      const c4 = i + 3 < len ? _BASE64_CHARS.indexOf(cleaned[i + 3]) : 0;
+      bytes.push(c1 << 2 | c2 >> 4);
+      if (i + 2 < len) bytes.push((c2 & 15) << 4 | c3 >> 2);
+      if (i + 3 < len) bytes.push((c3 & 3) << 6 | c4);
+    }
+    return new Uint8Array(bytes);
+  }
   function createNode(spec) {
     return __async(this, null, function* () {
       switch (spec.type) {
@@ -228,10 +244,10 @@
       }
     });
   }
-  function applyFills(node, fills, errors) {
+  function applyFills(node, fills, errors, imagePayloads) {
     try {
       const figmaFills = fills.filter((f) => f.visible !== false).map((fill) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         if (fill.type === "SOLID") {
           const rgba = fill.color ? (0, import_shared2.hexToRgba)(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
           return {
@@ -253,6 +269,30 @@
               [0, 1, 0]
             ],
             opacity: (_d = fill.opacity) != null ? _d : 1
+          };
+        }
+        if (fill.type === "IMAGE") {
+          if (fill.imageUrl && imagePayloads && imagePayloads[fill.imageUrl]) {
+            try {
+              const bytes = _base64Decode(imagePayloads[fill.imageUrl]);
+              const image = figma.createImage(bytes);
+              return {
+                type: "IMAGE",
+                imageHash: image.hash,
+                scaleMode: (_e = fill.scaleMode) != null ? _e : "FILL"
+              };
+            } catch (imgErr) {
+              errors.push(
+                `IMAGE fill (${fill.imageUrl}): ${imgErr instanceof Error ? imgErr.message : String(imgErr)}`
+              );
+            }
+          } else if (fill.imageUrl) {
+            errors.push(`IMAGE fill: no data for URL ${fill.imageUrl} (download may have failed)`);
+          }
+          return {
+            type: "SOLID",
+            color: { r: 0.8, g: 0.8, b: 0.8 },
+            opacity: 1
           };
         }
         return {
@@ -420,7 +460,7 @@
       node.layoutSizingVertical = spec.layoutSizingVertical;
     }
   }
-  function buildComponentSet(spec, parent, idMap, failedFonts) {
+  function buildComponentSet(spec, parent, idMap, failedFonts, imagePayloads) {
     return __async(this, null, function* () {
       var _a, _b, _c, _d;
       const errors = [];
@@ -438,7 +478,7 @@
           errors.push(`COMPONENT_SET children must be COMPONENT type, got ${childSpec.type} \u2014 wrapping as COMPONENT`);
           childSpec.type = "COMPONENT";
         }
-        const childResult = yield buildNode(childSpec, parent, idMap, failedFonts);
+        const childResult = yield buildNode(childSpec, parent, idMap, failedFonts, imagePayloads);
         errors.push(...childResult.errors);
         if (childResult.node.type === "COMPONENT") {
           componentNodes.push(childResult.node);
@@ -460,7 +500,7 @@
       if (spec.x !== void 0) componentSet.x = spec.x;
       if (spec.y !== void 0) componentSet.y = spec.y;
       if (spec.fills && "fills" in componentSet) {
-        applyFills(componentSet, spec.fills, errors);
+        applyFills(componentSet, spec.fills, errors, imagePayloads);
       }
       if (spec.effects && "effects" in componentSet) {
         applyEffects(componentSet, spec.effects, errors);
@@ -481,11 +521,11 @@
       return { node: componentSet, errors };
     });
   }
-  function buildNode(spec, parent, idMap, failedFonts) {
+  function buildNode(spec, parent, idMap, failedFonts, imagePayloads) {
     return __async(this, null, function* () {
       var _a, _b, _c, _d;
       if (spec.type === "COMPONENT_SET") {
-        return buildComponentSet(spec, parent, idMap, failedFonts);
+        return buildComponentSet(spec, parent, idMap, failedFonts, imagePayloads);
       }
       const errors = [];
       let node;
@@ -514,7 +554,7 @@
       if (spec.x !== void 0) node.x = spec.x;
       if (spec.y !== void 0) node.y = spec.y;
       if (spec.fills && "fills" in node) {
-        applyFills(node, spec.fills, errors);
+        applyFills(node, spec.fills, errors, imagePayloads);
       }
       if (spec.strokes && "strokes" in node) {
         applyStrokes(node, spec.strokes, errors);
@@ -533,6 +573,27 @@
       }
       if (spec.visible !== void 0) node.visible = spec.visible;
       if (spec.locked !== void 0) node.locked = spec.locked;
+      if (spec.fillStyleId && "fillStyleId" in node) {
+        try {
+          node.fillStyleId = spec.fillStyleId;
+        } catch (err) {
+          errors.push(`fillStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      if (spec.effectStyleId && "effectStyleId" in node) {
+        try {
+          node.effectStyleId = spec.effectStyleId;
+        } catch (err) {
+          errors.push(`effectStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      if (spec.textStyleId && node.type === "TEXT") {
+        try {
+          node.textStyleId = spec.textStyleId;
+        } catch (err) {
+          errors.push(`textStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       if (spec.layoutMode && spec.layoutMode !== "NONE" && "layoutMode" in node) {
         applyAutoLayout(node, spec);
       }
@@ -566,7 +627,13 @@
       }
       if (spec.children && "children" in node) {
         for (const childSpec of spec.children) {
-          const childResult = yield buildNode(childSpec, node, idMap, failedFonts);
+          const childResult = yield buildNode(
+            childSpec,
+            node,
+            idMap,
+            failedFonts,
+            imagePayloads
+          );
           errors.push(...childResult.errors);
         }
       }
@@ -575,7 +642,7 @@
   }
 
   // src/scene-builder/index.ts
-  function buildScene(spec, parentId) {
+  function buildScene(spec, parentId, imagePayloads) {
     return __async(this, null, function* () {
       const startTime = Date.now();
       const idMap = {};
@@ -621,7 +688,7 @@
       }
       let rootNodeId = "";
       try {
-        const result = yield buildNode(spec, parent, idMap, failedFonts);
+        const result = yield buildNode(spec, parent, idMap, failedFonts, imagePayloads);
         rootNodeId = result.node.id;
         errors.push(...result.errors);
       } catch (err) {
@@ -840,17 +907,32 @@
   }
 
   // src/handlers.ts
+  var BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   function base64Encode(bytes) {
     var _a, _b;
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let result = "";
     for (let i = 0; i < bytes.length; i += 3) {
       const b1 = bytes[i], b2 = (_a = bytes[i + 1]) != null ? _a : 0, b3 = (_b = bytes[i + 2]) != null ? _b : 0;
-      result += chars[b1 >> 2] + chars[(b1 & 3) << 4 | b2 >> 4];
-      result += i + 1 < bytes.length ? chars[(b2 & 15) << 2 | b3 >> 6] : "=";
-      result += i + 2 < bytes.length ? chars[b3 & 63] : "=";
+      result += BASE64_CHARS[b1 >> 2] + BASE64_CHARS[(b1 & 3) << 4 | b2 >> 4];
+      result += i + 1 < bytes.length ? BASE64_CHARS[(b2 & 15) << 2 | b3 >> 6] : "=";
+      result += i + 2 < bytes.length ? BASE64_CHARS[b3 & 63] : "=";
     }
     return result;
+  }
+  function base64Decode(str) {
+    const cleaned = str.replace(/[^A-Za-z0-9+/]/g, "");
+    const len = cleaned.length;
+    const bytes = [];
+    for (let i = 0; i < len; i += 4) {
+      const c1 = BASE64_CHARS.indexOf(cleaned[i]);
+      const c2 = BASE64_CHARS.indexOf(cleaned[i + 1]);
+      const c3 = i + 2 < len ? BASE64_CHARS.indexOf(cleaned[i + 2]) : 0;
+      const c4 = i + 3 < len ? BASE64_CHARS.indexOf(cleaned[i + 3]) : 0;
+      bytes.push(c1 << 2 | c2 >> 4);
+      if (i + 2 < len) bytes.push((c2 & 15) << 4 | c3 >> 2);
+      if (i + 3 < len) bytes.push((c3 & 3) << 6 | c4);
+    }
+    return new Uint8Array(bytes);
   }
   function handleGetDocumentInfo() {
     return __async(this, null, function* () {
@@ -1052,6 +1134,27 @@
       if (properties.locked !== void 0) sceneNode.locked = properties.locked;
       if (properties.layoutMode && "layoutMode" in sceneNode) {
         applyAutoLayout(sceneNode, properties);
+      }
+      if (properties.fillStyleId && "fillStyleId" in sceneNode) {
+        try {
+          sceneNode.fillStyleId = properties.fillStyleId;
+        } catch (err) {
+          errors.push(`fillStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      if (properties.effectStyleId && "effectStyleId" in sceneNode) {
+        try {
+          sceneNode.effectStyleId = properties.effectStyleId;
+        } catch (err) {
+          errors.push(`effectStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      if (properties.textStyleId && node.type === "TEXT") {
+        try {
+          node.textStyleId = properties.textStyleId;
+        } catch (err) {
+          errors.push(`textStyleId: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       if (node.type === "TEXT") {
         const failedFonts = /* @__PURE__ */ new Set();
@@ -1320,6 +1423,220 @@
       };
     });
   }
+  function handleBooleanOperation(operation, nodeIds) {
+    return __async(this, null, function* () {
+      if (nodeIds.length < 2) {
+        throw new Error(`Boolean operation requires at least 2 nodes, got ${nodeIds.length}`);
+      }
+      const nodes = [];
+      for (const nodeId of nodeIds) {
+        const node = yield figma.getNodeByIdAsync(nodeId);
+        if (!node) {
+          throw new Error(`Node not found: ${nodeId}`);
+        }
+        nodes.push(node);
+      }
+      const parent = nodes[0].parent;
+      if (!parent || !("children" in parent)) {
+        throw new Error("Nodes must have a valid parent to perform boolean operations");
+      }
+      for (const node of nodes.slice(1)) {
+        if (node.parent !== parent) {
+          throw new Error("All nodes must share the same parent for boolean operations");
+        }
+      }
+      const parentWithChildren = parent;
+      let result;
+      switch (operation) {
+        case "UNION":
+          result = figma.union(nodes, parentWithChildren);
+          break;
+        case "SUBTRACT":
+          result = figma.subtract(nodes, parentWithChildren);
+          break;
+        case "INTERSECT":
+          result = figma.intersect(nodes, parentWithChildren);
+          break;
+        case "EXCLUDE":
+          result = figma.exclude(nodes, parentWithChildren);
+          break;
+        default:
+          throw new Error(`Unknown boolean operation: ${operation}`);
+      }
+      try {
+        if (typeof figma.commitUndo === "function") {
+          figma.commitUndo();
+        }
+      } catch (e) {
+      }
+      return {
+        resultNodeId: result.id,
+        name: result.name,
+        type: result.type,
+        operation,
+        inputCount: nodeIds.length
+      };
+    });
+  }
+  function handleSetImageFill(nodeId, imageData, scaleMode) {
+    return __async(this, null, function* () {
+      const bytes = base64Decode(imageData);
+      const image = figma.createImage(bytes);
+      const node = yield figma.getNodeByIdAsync(nodeId);
+      if (!node) {
+        throw new Error(`Node not found: ${nodeId}`);
+      }
+      if (!("fills" in node)) {
+        throw new Error(`Node ${nodeId} does not support fills`);
+      }
+      const resolvedScaleMode = scaleMode != null ? scaleMode : "FILL";
+      node.fills = [
+        {
+          type: "IMAGE",
+          imageHash: image.hash,
+          scaleMode: resolvedScaleMode
+        }
+      ];
+      return {
+        nodeId: node.id,
+        name: node.name,
+        imageHash: image.hash
+      };
+    });
+  }
+  function handleCreatePaintStyle(name, fills) {
+    return __async(this, null, function* () {
+      var _a, _b, _c, _d;
+      const style = figma.createPaintStyle();
+      style.name = name;
+      const errors = [];
+      const figmaPaints = [];
+      for (const fill of fills) {
+        if (fill.type === "SOLID") {
+          const rgba = fill.color ? (0, import_shared4.hexToRgba)(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
+          figmaPaints.push({
+            type: "SOLID",
+            color: { r: rgba.r, g: rgba.g, b: rgba.b },
+            opacity: (_a = fill.opacity) != null ? _a : rgba.a
+          });
+        } else if (fill.type === "GRADIENT_LINEAR" || fill.type === "GRADIENT_RADIAL" || fill.type === "GRADIENT_ANGULAR" || fill.type === "GRADIENT_DIAMOND") {
+          const stops = ((_b = fill.gradientStops) != null ? _b : []).map((stop) => {
+            const c = (0, import_shared4.hexToRgba)(stop.color);
+            return { position: stop.position, color: { r: c.r, g: c.g, b: c.b, a: c.a } };
+          });
+          figmaPaints.push({
+            type: fill.type,
+            gradientStops: stops,
+            gradientTransform: (_c = fill.gradientTransform) != null ? _c : [
+              [1, 0, 0],
+              [0, 1, 0]
+            ],
+            opacity: (_d = fill.opacity) != null ? _d : 1
+          });
+        } else {
+          errors.push(`Unsupported fill type for style: ${fill.type}`);
+        }
+      }
+      style.paints = figmaPaints;
+      return { id: style.id, name: style.name, key: style.key, errors };
+    });
+  }
+  function handleCreateTextStyle(name, props) {
+    return __async(this, null, function* () {
+      var _a;
+      const style = figma.createTextStyle();
+      style.name = name;
+      const family = (_a = props.fontFamily) != null ? _a : "Inter";
+      const fontStyle = props.fontWeight !== void 0 ? typeof props.fontWeight === "number" ? getFontStyleFromWeight(props.fontWeight) : String(props.fontWeight) : "Regular";
+      yield figma.loadFontAsync({ family, style: fontStyle });
+      style.fontName = { family, style: fontStyle };
+      if (props.fontSize !== void 0) {
+        style.fontSize = props.fontSize;
+      }
+      if (props.lineHeight !== void 0) {
+        if (typeof props.lineHeight === "number") {
+          style.lineHeight = { value: props.lineHeight, unit: "PIXELS" };
+        } else {
+          style.lineHeight = props.lineHeight;
+        }
+      }
+      if (props.letterSpacing !== void 0) {
+        style.letterSpacing = { value: props.letterSpacing, unit: "PIXELS" };
+      }
+      if (props.textDecoration !== void 0) {
+        style.textDecoration = props.textDecoration;
+      }
+      if (props.textCase !== void 0) {
+        style.textCase = props.textCase;
+      }
+      return { id: style.id, name: style.name, key: style.key };
+    });
+  }
+  function handleCreateEffectStyle(name, effects) {
+    return __async(this, null, function* () {
+      const style = figma.createEffectStyle();
+      style.name = name;
+      const figmaEffects = effects.map((effect) => {
+        var _a, _b, _c, _d, _e;
+        if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+          const rgba = effect.color ? (0, import_shared4.hexToRgba)(effect.color) : { r: 0, g: 0, b: 0, a: 0.5 };
+          const alpha = (_a = effect.opacity) != null ? _a : rgba.a;
+          return {
+            type: effect.type,
+            color: { r: rgba.r, g: rgba.g, b: rgba.b, a: alpha },
+            offset: (_b = effect.offset) != null ? _b : { x: 0, y: 4 },
+            radius: effect.radius,
+            spread: (_c = effect.spread) != null ? _c : 0,
+            visible: (_d = effect.visible) != null ? _d : true,
+            blendMode: "NORMAL"
+          };
+        }
+        return {
+          type: effect.type,
+          radius: effect.radius,
+          visible: (_e = effect.visible) != null ? _e : true
+        };
+      });
+      style.effects = figmaEffects;
+      return { id: style.id, name: style.name, key: style.key };
+    });
+  }
+  function handleCreatePage(name) {
+    return __async(this, null, function* () {
+      const page = figma.createPage();
+      page.name = name;
+      return { id: page.id, name: page.name };
+    });
+  }
+  function handleRenamePage(pageId, name) {
+    return __async(this, null, function* () {
+      const node = yield figma.getNodeByIdAsync(pageId);
+      if (!node) {
+        throw new Error(`Page not found: ${pageId}`);
+      }
+      if (node.type !== "PAGE") {
+        throw new Error(`Node ${pageId} is not a PAGE (got ${node.type})`);
+      }
+      const page = node;
+      const oldName = page.name;
+      page.name = name;
+      return { id: page.id, name, oldName };
+    });
+  }
+  function handleSetCurrentPage(pageId) {
+    return __async(this, null, function* () {
+      const node = yield figma.getNodeByIdAsync(pageId);
+      if (!node) {
+        throw new Error(`Page not found: ${pageId}`);
+      }
+      if (node.type !== "PAGE") {
+        throw new Error(`Node ${pageId} is not a PAGE (got ${node.type})`);
+      }
+      const page = node;
+      yield figma.setCurrentPageAsync(page);
+      return { id: page.id, name: page.name };
+    });
+  }
   function getFontStyleFromWeight(weight) {
     switch (weight) {
       case 100:
@@ -1364,7 +1681,11 @@
         figma.ui.postMessage({ type: "pong", id: msg.id });
         break;
       case "build_scene":
-        buildScene(msg.spec, msg.parentId).then((result) => {
+        buildScene(
+          msg.spec,
+          msg.parentId,
+          msg.imagePayloads
+        ).then((result) => {
           figma.ui.postMessage({
             type: "result",
             id: msg.id,
@@ -1424,6 +1745,42 @@
           msg.action,
           msg.properties
         ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Page Management Tools ────────────────────────────────
+      case "create_page":
+        handleCreatePage(msg.name).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "rename_page":
+        handleRenamePage(msg.pageId, msg.name).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "set_current_page":
+        handleSetCurrentPage(msg.pageId).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Style Creation Tools ─────────────────────────────────
+      case "create_paint_style":
+        handleCreatePaintStyle(msg.name, msg.fills).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "create_text_style":
+        handleCreateTextStyle(msg.name, {
+          fontFamily: msg.fontFamily,
+          fontSize: msg.fontSize,
+          fontWeight: msg.fontWeight,
+          lineHeight: msg.lineHeight,
+          letterSpacing: msg.letterSpacing,
+          textDecoration: msg.textDecoration,
+          textCase: msg.textCase
+        }).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "create_effect_style":
+        handleCreateEffectStyle(msg.name, msg.effects).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Image Fill Tools ─────────────────────────────────────
+      case "set_image_fill":
+        handleSetImageFill(msg.nodeId, msg.imageData, msg.scaleMode).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // ─── Boolean Operation Tools ──────────────────────────────
+      case "boolean_operation":
+        handleBooleanOperation(msg.operation, msg.nodeIds).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       default:
         console.log(`[FigmaFast] Unknown message type: ${msg.type}`);

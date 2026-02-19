@@ -11,6 +11,10 @@ import { registerBuildSceneTool } from './tools/build-scene.js';
 import { registerReadTools } from './tools/read-tools.js';
 import { registerEditTools } from './tools/edit-tools.js';
 import { registerComponentTools } from './tools/component-tools.js';
+import { registerPageTools } from './tools/page-tools.js';
+import { registerStyleTools } from './tools/style-tools.js';
+import { registerImageTools } from './tools/image-tools.js';
+import { registerBooleanTools } from './tools/boolean-tools.js';
 
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 
@@ -26,6 +30,10 @@ registerBuildSceneTool(server);
 registerReadTools(server);
 registerEditTools(server);
 registerComponentTools(server);
+registerPageTools(server);
+registerStyleTools(server);
+registerImageTools(server);
+registerBooleanTools(server);
 
 // Start embedded WebSocket server
 startWsServer(WS_PORT);

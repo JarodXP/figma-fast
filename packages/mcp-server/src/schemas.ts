@@ -23,6 +23,11 @@ export const FillSchema = z.object({
   gradientTransform: z
     .tuple([z.tuple([z.number(), z.number(), z.number()]), z.tuple([z.number(), z.number(), z.number()])])
     .optional(),
+  imageUrl: z
+    .string()
+    .url()
+    .optional()
+    .describe('URL of image for IMAGE fill type. Server downloads and uploads to Figma.'),
   scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
 });
 
@@ -123,6 +128,17 @@ export const SceneNodeSchema: z.ZodType<any> = z.lazy(() =>
     // Component / Component Set
     componentDescription: z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
 
+    // Style binding — apply Figma style IDs (from get_styles)
+    fillStyleId: z
+      .string()
+      .optional()
+      .describe('Figma paint style ID to bind (from get_styles). Overrides fills array if set.'),
+    textStyleId: z.string().optional().describe('Figma text style ID to bind (from get_styles). Sets font, size, etc.'),
+    effectStyleId: z
+      .string()
+      .optional()
+      .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
+
     // Children
     children: z.array(z.lazy(() => SceneNodeSchema)).optional(),
 
@@ -171,5 +187,15 @@ export const ModifyPropertiesSchema = z
     textCase: z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
     // Component instance
     swapComponent: z.string().optional().describe('Component node ID to swap an INSTANCE node to (e.g. swap an icon)'),
+    // Style binding
+    fillStyleId: z
+      .string()
+      .optional()
+      .describe('Figma paint style ID to bind (from get_styles). Overrides fills array if set.'),
+    textStyleId: z.string().optional().describe('Figma text style ID to bind (from get_styles). Sets font, size, etc.'),
+    effectStyleId: z
+      .string()
+      .optional()
+      .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
   })
   .describe('Properties to update on the node');

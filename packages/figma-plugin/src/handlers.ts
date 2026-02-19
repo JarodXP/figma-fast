@@ -3,8 +3,8 @@
  * Each handler is an async function returning data for the result message.
  */
 
-import type { SceneNode as SceneSpec } from '@figma-fast/shared';
-import { rgbaToHex } from '@figma-fast/shared';
+import type { SceneNode as SceneSpec, Fill, Effect as EffectSpec } from '@figma-fast/shared';
+import { rgbaToHex, hexToRgba } from '@figma-fast/shared';
 import { serializeNode } from './serialize-node.js';
 import {
   applyFills,
@@ -16,20 +16,38 @@ import {
   applySizing,
 } from './scene-builder/build-node.js';
 
-// ─── Base64 Encoder (btoa unavailable in Figma sandbox) ────────
+// ─── Base64 Encoder/Decoder (btoa/atob unavailable in Figma sandbox) ─────
+
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 function base64Encode(bytes: Uint8Array): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   let result = '';
   for (let i = 0; i < bytes.length; i += 3) {
     const b1 = bytes[i],
       b2 = bytes[i + 1] ?? 0,
       b3 = bytes[i + 2] ?? 0;
-    result += chars[b1 >> 2] + chars[((b1 & 3) << 4) | (b2 >> 4)];
-    result += i + 1 < bytes.length ? chars[((b2 & 15) << 2) | (b3 >> 6)] : '=';
-    result += i + 2 < bytes.length ? chars[b3 & 63] : '=';
+    result += BASE64_CHARS[b1 >> 2] + BASE64_CHARS[((b1 & 3) << 4) | (b2 >> 4)];
+    result += i + 1 < bytes.length ? BASE64_CHARS[((b2 & 15) << 2) | (b3 >> 6)] : '=';
+    result += i + 2 < bytes.length ? BASE64_CHARS[b3 & 63] : '=';
   }
   return result;
+}
+
+function base64Decode(str: string): Uint8Array {
+  // Strip whitespace and padding
+  const cleaned = str.replace(/[^A-Za-z0-9+/]/g, '');
+  const len = cleaned.length;
+  const bytes: number[] = [];
+  for (let i = 0; i < len; i += 4) {
+    const c1 = BASE64_CHARS.indexOf(cleaned[i]);
+    const c2 = BASE64_CHARS.indexOf(cleaned[i + 1]);
+    const c3 = i + 2 < len ? BASE64_CHARS.indexOf(cleaned[i + 2]) : 0;
+    const c4 = i + 3 < len ? BASE64_CHARS.indexOf(cleaned[i + 3]) : 0;
+    bytes.push((c1 << 2) | (c2 >> 4));
+    if (i + 2 < len) bytes.push(((c2 & 15) << 4) | (c3 >> 2));
+    if (i + 3 < len) bytes.push(((c3 & 3) << 6) | c4);
+  }
+  return new Uint8Array(bytes);
 }
 
 // ─── Read Handlers ─────────────────────────────────────────────
@@ -251,6 +269,29 @@ export async function handleModifyNode(nodeId: string, properties: Partial<Scene
   // Auto-layout
   if (properties.layoutMode && 'layoutMode' in sceneNode) {
     applyAutoLayout(sceneNode as FrameNode, properties as SceneSpec);
+  }
+
+  // Style binding
+  if (properties.fillStyleId && 'fillStyleId' in sceneNode) {
+    try {
+      (sceneNode as any).fillStyleId = properties.fillStyleId;
+    } catch (err) {
+      errors.push(`fillStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (properties.effectStyleId && 'effectStyleId' in sceneNode) {
+    try {
+      (sceneNode as any).effectStyleId = properties.effectStyleId;
+    } catch (err) {
+      errors.push(`effectStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (properties.textStyleId && node.type === 'TEXT') {
+    try {
+      (node as TextNode).textStyleId = properties.textStyleId;
+    } catch (err) {
+      errors.push(`textStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // Text properties
@@ -577,6 +618,265 @@ export async function handleManageComponentProperties(
     action,
     propertiesModified: modified,
   };
+}
+
+// ─── Boolean Operation Handler ────────────────────────────────
+
+export async function handleBooleanOperation(operation: string, nodeIds: string[]): Promise<unknown> {
+  if (nodeIds.length < 2) {
+    throw new Error(`Boolean operation requires at least 2 nodes, got ${nodeIds.length}`);
+  }
+
+  // Resolve all nodes
+  const nodes: SceneNode[] = [];
+  for (const nodeId of nodeIds) {
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (!node) {
+      throw new Error(`Node not found: ${nodeId}`);
+    }
+    nodes.push(node as SceneNode);
+  }
+
+  // Verify all nodes share the same parent
+  const parent = nodes[0].parent;
+  if (!parent || !('children' in parent)) {
+    throw new Error('Nodes must have a valid parent to perform boolean operations');
+  }
+  for (const node of nodes.slice(1)) {
+    if (node.parent !== parent) {
+      throw new Error('All nodes must share the same parent for boolean operations');
+    }
+  }
+
+  const parentWithChildren = parent as BaseNode & ChildrenMixin;
+  let result: BooleanOperationNode;
+
+  switch (operation) {
+    case 'UNION':
+      result = figma.union(nodes, parentWithChildren);
+      break;
+    case 'SUBTRACT':
+      result = figma.subtract(nodes, parentWithChildren);
+      break;
+    case 'INTERSECT':
+      result = figma.intersect(nodes, parentWithChildren);
+      break;
+    case 'EXCLUDE':
+      result = figma.exclude(nodes, parentWithChildren);
+      break;
+    default:
+      throw new Error(`Unknown boolean operation: ${operation}`);
+  }
+
+  // Commit undo
+  try {
+    if (typeof figma.commitUndo === 'function') {
+      figma.commitUndo();
+    }
+  } catch {
+    // commitUndo may not be available
+  }
+
+  return {
+    resultNodeId: result.id,
+    name: result.name,
+    type: result.type,
+    operation,
+    inputCount: nodeIds.length,
+  };
+}
+
+// ─── Image Fill Handler ────────────────────────────────────────
+
+export async function handleSetImageFill(nodeId: string, imageData: string, scaleMode?: string): Promise<unknown> {
+  const bytes = base64Decode(imageData);
+  const image = figma.createImage(bytes);
+
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    throw new Error(`Node not found: ${nodeId}`);
+  }
+  if (!('fills' in node)) {
+    throw new Error(`Node ${nodeId} does not support fills`);
+  }
+
+  const resolvedScaleMode = (scaleMode ?? 'FILL') as ImagePaint['scaleMode'];
+  (node as GeometryMixin).fills = [
+    {
+      type: 'IMAGE',
+      imageHash: image.hash,
+      scaleMode: resolvedScaleMode,
+    } as ImagePaint,
+  ];
+
+  return {
+    nodeId: node.id,
+    name: (node as SceneNode).name,
+    imageHash: image.hash,
+  };
+}
+
+// ─── Style Creation Handlers ───────────────────────────────────
+
+export async function handleCreatePaintStyle(name: string, fills: Fill[]): Promise<unknown> {
+  const style = figma.createPaintStyle();
+  style.name = name;
+
+  const errors: string[] = [];
+  const figmaPaints: Paint[] = [];
+
+  for (const fill of fills) {
+    if (fill.type === 'SOLID') {
+      const rgba = fill.color ? hexToRgba(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
+      figmaPaints.push({
+        type: 'SOLID' as const,
+        color: { r: rgba.r, g: rgba.g, b: rgba.b },
+        opacity: fill.opacity ?? rgba.a,
+      });
+    } else if (
+      fill.type === 'GRADIENT_LINEAR' ||
+      fill.type === 'GRADIENT_RADIAL' ||
+      fill.type === 'GRADIENT_ANGULAR' ||
+      fill.type === 'GRADIENT_DIAMOND'
+    ) {
+      const stops: ColorStop[] = (fill.gradientStops ?? []).map((stop) => {
+        const c = hexToRgba(stop.color);
+        return { position: stop.position, color: { r: c.r, g: c.g, b: c.b, a: c.a } };
+      });
+      figmaPaints.push({
+        type: fill.type,
+        gradientStops: stops,
+        gradientTransform:
+          fill.gradientTransform ??
+          ([
+            [1, 0, 0],
+            [0, 1, 0],
+          ] as Transform),
+        opacity: fill.opacity ?? 1,
+      } as GradientPaint);
+    } else {
+      errors.push(`Unsupported fill type for style: ${fill.type}`);
+    }
+  }
+
+  style.paints = figmaPaints;
+
+  return { id: style.id, name: style.name, key: style.key, errors };
+}
+
+export async function handleCreateTextStyle(
+  name: string,
+  props: {
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number | string;
+    lineHeight?: number | { value: number; unit: 'PIXELS' | 'PERCENT' | 'AUTO' };
+    letterSpacing?: number;
+    textDecoration?: string;
+    textCase?: string;
+  },
+): Promise<unknown> {
+  const style = figma.createTextStyle();
+  style.name = name;
+
+  const family = props.fontFamily ?? 'Inter';
+  const fontStyle =
+    props.fontWeight !== undefined
+      ? typeof props.fontWeight === 'number'
+        ? getFontStyleFromWeight(props.fontWeight)
+        : String(props.fontWeight)
+      : 'Regular';
+
+  await figma.loadFontAsync({ family, style: fontStyle });
+  style.fontName = { family, style: fontStyle };
+
+  if (props.fontSize !== undefined) {
+    style.fontSize = props.fontSize;
+  }
+  if (props.lineHeight !== undefined) {
+    if (typeof props.lineHeight === 'number') {
+      style.lineHeight = { value: props.lineHeight, unit: 'PIXELS' };
+    } else {
+      style.lineHeight = props.lineHeight;
+    }
+  }
+  if (props.letterSpacing !== undefined) {
+    style.letterSpacing = { value: props.letterSpacing, unit: 'PIXELS' };
+  }
+  if (props.textDecoration !== undefined) {
+    style.textDecoration = props.textDecoration as TextDecoration;
+  }
+  if (props.textCase !== undefined) {
+    style.textCase = props.textCase as TextCase;
+  }
+
+  return { id: style.id, name: style.name, key: style.key };
+}
+
+export async function handleCreateEffectStyle(name: string, effects: EffectSpec[]): Promise<unknown> {
+  const style = figma.createEffectStyle();
+  style.name = name;
+
+  const figmaEffects: Effect[] = effects.map((effect) => {
+    if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
+      const rgba = effect.color ? hexToRgba(effect.color) : { r: 0, g: 0, b: 0, a: 0.5 };
+      const alpha = effect.opacity ?? rgba.a;
+      return {
+        type: effect.type,
+        color: { r: rgba.r, g: rgba.g, b: rgba.b, a: alpha },
+        offset: effect.offset ?? { x: 0, y: 4 },
+        radius: effect.radius,
+        spread: effect.spread ?? 0,
+        visible: effect.visible ?? true,
+        blendMode: 'NORMAL' as BlendMode,
+      } as DropShadowEffect | InnerShadowEffect;
+    }
+    // LAYER_BLUR, BACKGROUND_BLUR
+    return {
+      type: effect.type,
+      radius: effect.radius,
+      visible: effect.visible ?? true,
+    } as BlurEffect;
+  });
+
+  style.effects = figmaEffects;
+
+  return { id: style.id, name: style.name, key: style.key };
+}
+
+// ─── Page Management Handlers ──────────────────────────────────
+
+export async function handleCreatePage(name: string): Promise<unknown> {
+  const page = figma.createPage();
+  page.name = name;
+  return { id: page.id, name: page.name };
+}
+
+export async function handleRenamePage(pageId: string, name: string): Promise<unknown> {
+  const node = await figma.getNodeByIdAsync(pageId);
+  if (!node) {
+    throw new Error(`Page not found: ${pageId}`);
+  }
+  if (node.type !== 'PAGE') {
+    throw new Error(`Node ${pageId} is not a PAGE (got ${node.type})`);
+  }
+  const page = node as PageNode;
+  const oldName = page.name;
+  page.name = name;
+  return { id: page.id, name, oldName };
+}
+
+export async function handleSetCurrentPage(pageId: string): Promise<unknown> {
+  const node = await figma.getNodeByIdAsync(pageId);
+  if (!node) {
+    throw new Error(`Page not found: ${pageId}`);
+  }
+  if (node.type !== 'PAGE') {
+    throw new Error(`Node ${pageId} is not a PAGE (got ${node.type})`);
+  }
+  const page = node as PageNode;
+  await figma.setCurrentPageAsync(page);
+  return { id: page.id, name: page.name };
 }
 
 // ─── Helper ────────────────────────────────────────────────────

@@ -21,6 +21,11 @@ exports.FillSchema = zod_1.z.object({
     gradientTransform: zod_1.z
         .tuple([zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number()]), zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number()])])
         .optional(),
+    imageUrl: zod_1.z
+        .string()
+        .url()
+        .optional()
+        .describe('URL of image for IMAGE fill type. Server downloads and uploads to Figma.'),
     scaleMode: zod_1.z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
 });
 exports.StrokeSchema = zod_1.z.object({
@@ -107,6 +112,16 @@ exports.SceneNodeSchema = zod_1.z.lazy(() => zod_1.z.object({
         .describe('Property overrides for COMPONENT_INSTANCE — keys are property names, values are strings or booleans'),
     // Component / Component Set
     componentDescription: zod_1.z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
+    // Style binding — apply Figma style IDs (from get_styles)
+    fillStyleId: zod_1.z
+        .string()
+        .optional()
+        .describe('Figma paint style ID to bind (from get_styles). Overrides fills array if set.'),
+    textStyleId: zod_1.z.string().optional().describe('Figma text style ID to bind (from get_styles). Sets font, size, etc.'),
+    effectStyleId: zod_1.z
+        .string()
+        .optional()
+        .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
     // Children
     children: zod_1.z.array(zod_1.z.lazy(() => exports.SceneNodeSchema)).optional(),
     // Visibility
@@ -151,6 +166,16 @@ exports.ModifyPropertiesSchema = zod_1.z
     textCase: zod_1.z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
     // Component instance
     swapComponent: zod_1.z.string().optional().describe('Component node ID to swap an INSTANCE node to (e.g. swap an icon)'),
+    // Style binding
+    fillStyleId: zod_1.z
+        .string()
+        .optional()
+        .describe('Figma paint style ID to bind (from get_styles). Overrides fills array if set.'),
+    textStyleId: zod_1.z.string().optional().describe('Figma text style ID to bind (from get_styles). Sets font, size, etc.'),
+    effectStyleId: zod_1.z
+        .string()
+        .optional()
+        .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
 })
     .describe('Properties to update on the node');
 //# sourceMappingURL=schemas.js.map

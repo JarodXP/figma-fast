@@ -6,7 +6,7 @@
 
 import type { SceneNode as SceneSpec } from '@figma-fast/shared';
 import { collectFonts, preloadFonts } from './fonts.js';
-import { buildNode, type IdMap } from './build-node.js';
+import { buildNode, type IdMap, type ImagePayloads } from './build-node.js';
 
 export interface BuildSceneResult {
   success: boolean;
@@ -18,7 +18,11 @@ export interface BuildSceneResult {
   durationMs: number;
 }
 
-export async function buildScene(spec: SceneSpec, parentId?: string): Promise<BuildSceneResult> {
+export async function buildScene(
+  spec: SceneSpec,
+  parentId?: string,
+  imagePayloads?: ImagePayloads,
+): Promise<BuildSceneResult> {
   const startTime = Date.now();
   const idMap: IdMap = {};
   const errors: string[] = [];
@@ -74,7 +78,7 @@ export async function buildScene(spec: SceneSpec, parentId?: string): Promise<Bu
   // 5. BUILD NODE TREE
   let rootNodeId = '';
   try {
-    const result = await buildNode(spec, parent, idMap, failedFonts);
+    const result = await buildNode(spec, parent, idMap, failedFonts, imagePayloads);
     rootNodeId = result.node.id;
     errors.push(...result.errors);
   } catch (err) {

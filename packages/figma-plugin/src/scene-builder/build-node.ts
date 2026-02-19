@@ -10,10 +10,33 @@ import { getFontStyle } from './fonts.js';
 /** Maps client-assigned spec IDs to Figma node IDs */
 export type IdMap = Record<string, string>;
 
+/** Map of imageUrl -> base64 image data, pre-downloaded by the MCP server */
+export type ImagePayloads = Record<string, string>;
+
 /** Result of building a single node */
 export interface BuildResult {
   node: SceneNode;
   errors: string[];
+}
+
+// ─── Base64 Decoder (for IMAGE fills with imagePayloads) ────────
+
+const _BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function _base64Decode(str: string): Uint8Array {
+  const cleaned = str.replace(/[^A-Za-z0-9+/]/g, '');
+  const len = cleaned.length;
+  const bytes: number[] = [];
+  for (let i = 0; i < len; i += 4) {
+    const c1 = _BASE64_CHARS.indexOf(cleaned[i]);
+    const c2 = _BASE64_CHARS.indexOf(cleaned[i + 1]);
+    const c3 = i + 2 < len ? _BASE64_CHARS.indexOf(cleaned[i + 2]) : 0;
+    const c4 = i + 3 < len ? _BASE64_CHARS.indexOf(cleaned[i + 3]) : 0;
+    bytes.push((c1 << 2) | (c2 >> 4));
+    if (i + 2 < len) bytes.push(((c2 & 15) << 4) | (c3 >> 2));
+    if (i + 3 < len) bytes.push(((c3 & 3) << 6) | c4);
+  }
+  return new Uint8Array(bytes);
 }
 
 // ─── Node Creation ──────────────────────────────────────────────
@@ -68,7 +91,7 @@ async function createNode(spec: SceneSpec): Promise<SceneNode> {
 
 // ─── Property Helpers ───────────────────────────────────────────
 
-export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[]): void {
+export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[], imagePayloads?: ImagePayloads): void {
   try {
     const figmaFills: Paint[] = fills
       .filter((f) => f.visible !== false)
@@ -103,7 +126,33 @@ export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[])
             opacity: fill.opacity ?? 1,
           } as GradientPaint;
         }
-        // IMAGE or unsupported: placeholder gray
+        if (fill.type === 'IMAGE') {
+          // Use pre-downloaded image data if available
+          if (fill.imageUrl && imagePayloads && imagePayloads[fill.imageUrl]) {
+            try {
+              const bytes = _base64Decode(imagePayloads[fill.imageUrl]);
+              const image = figma.createImage(bytes);
+              return {
+                type: 'IMAGE' as const,
+                imageHash: image.hash,
+                scaleMode: (fill.scaleMode ?? 'FILL') as ImagePaint['scaleMode'],
+              } as ImagePaint;
+            } catch (imgErr) {
+              errors.push(
+                `IMAGE fill (${fill.imageUrl}): ${imgErr instanceof Error ? imgErr.message : String(imgErr)}`,
+              );
+            }
+          } else if (fill.imageUrl) {
+            errors.push(`IMAGE fill: no data for URL ${fill.imageUrl} (download may have failed)`);
+          }
+          // Fallback to gray placeholder
+          return {
+            type: 'SOLID' as const,
+            color: { r: 0.8, g: 0.8, b: 0.8 },
+            opacity: 1,
+          };
+        }
+        // Unsupported: placeholder gray
         return {
           type: 'SOLID' as const,
           color: { r: 0.8, g: 0.8, b: 0.8 },
@@ -304,6 +353,7 @@ async function buildComponentSet(
   parent: BaseNode & ChildrenMixin,
   idMap: IdMap,
   failedFonts: Set<string>,
+  imagePayloads?: ImagePayloads,
 ): Promise<BuildResult> {
   const errors: string[] = [];
 
@@ -323,7 +373,7 @@ async function buildComponentSet(
       errors.push(`COMPONENT_SET children must be COMPONENT type, got ${childSpec.type} — wrapping as COMPONENT`);
       childSpec.type = 'COMPONENT';
     }
-    const childResult = await buildNode(childSpec, parent, idMap, failedFonts);
+    const childResult = await buildNode(childSpec, parent, idMap, failedFonts, imagePayloads);
     errors.push(...childResult.errors);
     if (childResult.node.type === 'COMPONENT') {
       componentNodes.push(childResult.node as ComponentNode);
@@ -352,7 +402,7 @@ async function buildComponentSet(
   if (spec.y !== undefined) componentSet.y = spec.y;
 
   if (spec.fills && 'fills' in componentSet) {
-    applyFills(componentSet as GeometryMixin, spec.fills, errors);
+    applyFills(componentSet as GeometryMixin, spec.fills, errors, imagePayloads);
   }
   if (spec.effects && 'effects' in componentSet) {
     applyEffects(componentSet as BlendMixin, spec.effects, errors);
@@ -383,10 +433,11 @@ export async function buildNode(
   parent: BaseNode & ChildrenMixin,
   idMap: IdMap,
   failedFonts: Set<string>,
+  imagePayloads?: ImagePayloads,
 ): Promise<BuildResult> {
   // COMPONENT_SET uses reversed build order — delegate entirely
   if (spec.type === 'COMPONENT_SET') {
-    return buildComponentSet(spec, parent, idMap, failedFonts);
+    return buildComponentSet(spec, parent, idMap, failedFonts, imagePayloads);
   }
 
   const errors: string[] = [];
@@ -426,7 +477,7 @@ export async function buildNode(
 
   // 4. VISUAL PROPERTIES
   if (spec.fills && 'fills' in node) {
-    applyFills(node as GeometryMixin, spec.fills, errors);
+    applyFills(node as GeometryMixin, spec.fills, errors, imagePayloads);
   }
   if (spec.strokes && 'strokes' in node) {
     applyStrokes(node as GeometryMixin, spec.strokes, errors);
@@ -445,6 +496,29 @@ export async function buildNode(
   }
   if (spec.visible !== undefined) node.visible = spec.visible;
   if (spec.locked !== undefined) node.locked = spec.locked;
+
+  // 4b. STYLE BINDING — apply style IDs (overrides individual properties)
+  if (spec.fillStyleId && 'fillStyleId' in node) {
+    try {
+      (node as any).fillStyleId = spec.fillStyleId;
+    } catch (err) {
+      errors.push(`fillStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (spec.effectStyleId && 'effectStyleId' in node) {
+    try {
+      (node as any).effectStyleId = spec.effectStyleId;
+    } catch (err) {
+      errors.push(`effectStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  if (spec.textStyleId && node.type === 'TEXT') {
+    try {
+      (node as TextNode).textStyleId = spec.textStyleId;
+    } catch (err) {
+      errors.push(`textStyleId: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   // 5. AUTO-LAYOUT — before children, affects child positioning
   if (spec.layoutMode && spec.layoutMode !== 'NONE' && 'layoutMode' in node) {
@@ -492,7 +566,13 @@ export async function buildNode(
   // 10. RECURSE INTO CHILDREN
   if (spec.children && 'children' in node) {
     for (const childSpec of spec.children) {
-      const childResult = await buildNode(childSpec, node as BaseNode & ChildrenMixin, idMap, failedFonts);
+      const childResult = await buildNode(
+        childSpec,
+        node as BaseNode & ChildrenMixin,
+        idMap,
+        failedFonts,
+        imagePayloads,
+      );
       errors.push(...childResult.errors);
     }
   }

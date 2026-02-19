@@ -19,9 +19,11 @@ export declare const FillSchema: z.ZodObject<{
         position: number;
     }>, "many">>;
     gradientTransform: z.ZodOptional<z.ZodTuple<[z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>, z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>], null>>;
+    imageUrl: z.ZodOptional<z.ZodString>;
     scaleMode: z.ZodOptional<z.ZodEnum<["FILL", "FIT", "CROP", "TILE"]>>;
 }, "strip", z.ZodTypeAny, {
     type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+    scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
     color?: string | undefined;
     opacity?: number | undefined;
     visible?: boolean | undefined;
@@ -30,9 +32,10 @@ export declare const FillSchema: z.ZodObject<{
         position: number;
     }[] | undefined;
     gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-    scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+    imageUrl?: string | undefined;
 }, {
     type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+    scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
     color?: string | undefined;
     opacity?: number | undefined;
     visible?: boolean | undefined;
@@ -41,7 +44,7 @@ export declare const FillSchema: z.ZodObject<{
         position: number;
     }[] | undefined;
     gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-    scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+    imageUrl?: string | undefined;
 }>;
 export declare const StrokeSchema: z.ZodObject<{
     type: z.ZodOptional<z.ZodEnum<["SOLID", "GRADIENT_LINEAR", "GRADIENT_RADIAL", "GRADIENT_ANGULAR", "GRADIENT_DIAMOND", "IMAGE"]>>;
@@ -138,9 +141,11 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
             position: number;
         }>, "many">>;
         gradientTransform: z.ZodOptional<z.ZodTuple<[z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>, z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>], null>>;
+        imageUrl: z.ZodOptional<z.ZodString>;
         scaleMode: z.ZodOptional<z.ZodEnum<["FILL", "FIT", "CROP", "TILE"]>>;
     }, "strip", z.ZodTypeAny, {
         type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
         color?: string | undefined;
         opacity?: number | undefined;
         visible?: boolean | undefined;
@@ -149,9 +154,10 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
             position: number;
         }[] | undefined;
         gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+        imageUrl?: string | undefined;
     }, {
         type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
         color?: string | undefined;
         opacity?: number | undefined;
         visible?: boolean | undefined;
@@ -160,7 +166,7 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
             position: number;
         }[] | undefined;
         gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+        imageUrl?: string | undefined;
     }>, "many">>;
     strokes: z.ZodOptional<z.ZodArray<z.ZodObject<{
         type: z.ZodOptional<z.ZodEnum<["SOLID", "GRADIENT_LINEAR", "GRADIENT_RADIAL", "GRADIENT_ANGULAR", "GRADIENT_DIAMOND", "IMAGE"]>>;
@@ -257,16 +263,16 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
     textDecoration: z.ZodOptional<z.ZodEnum<["NONE", "UNDERLINE", "STRIKETHROUGH"]>>;
     textCase: z.ZodOptional<z.ZodEnum<["ORIGINAL", "UPPER", "LOWER", "TITLE"]>>;
     swapComponent: z.ZodOptional<z.ZodString>;
+    fillStyleId: z.ZodOptional<z.ZodString>;
+    textStyleId: z.ZodOptional<z.ZodString>;
+    effectStyleId: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     x?: number | undefined;
     y?: number | undefined;
     name?: string | undefined;
-    opacity?: number | undefined;
-    visible?: boolean | undefined;
-    width?: number | undefined;
-    height?: number | undefined;
     fills?: {
         type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
         color?: string | undefined;
         opacity?: number | undefined;
         visible?: boolean | undefined;
@@ -275,16 +281,18 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
             position: number;
         }[] | undefined;
         gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+        imageUrl?: string | undefined;
     }[] | undefined;
-    strokes?: {
-        color: string;
-        weight: number;
-        type?: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE" | undefined;
-        opacity?: number | undefined;
-        align?: "INSIDE" | "OUTSIDE" | "CENTER" | undefined;
-        dashPattern?: number[] | undefined;
-    }[] | undefined;
+    fontFamily?: string | undefined;
+    fontSize?: number | undefined;
+    fontWeight?: string | number | undefined;
+    lineHeight?: number | {
+        value: number;
+        unit: "PIXELS" | "PERCENT" | "AUTO";
+    } | undefined;
+    letterSpacing?: number | undefined;
+    textDecoration?: "NONE" | "UNDERLINE" | "STRIKETHROUGH" | undefined;
+    textCase?: "ORIGINAL" | "UPPER" | "LOWER" | "TITLE" | undefined;
     effects?: {
         type: "DROP_SHADOW" | "INNER_SHADOW" | "LAYER_BLUR" | "BACKGROUND_BLUR";
         radius: number;
@@ -297,9 +305,21 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
         } | undefined;
         spread?: number | undefined;
     }[] | undefined;
+    opacity?: number | undefined;
+    visible?: boolean | undefined;
+    width?: number | undefined;
+    height?: number | undefined;
+    strokes?: {
+        color: string;
+        weight: number;
+        type?: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE" | undefined;
+        opacity?: number | undefined;
+        align?: "INSIDE" | "OUTSIDE" | "CENTER" | undefined;
+        dashPattern?: number[] | undefined;
+    }[] | undefined;
     cornerRadius?: number | [number, number, number, number] | undefined;
     clipsContent?: boolean | undefined;
-    layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE" | undefined;
+    layoutMode?: "NONE" | "HORIZONTAL" | "VERTICAL" | undefined;
     primaryAxisAlignItems?: "CENTER" | "MIN" | "MAX" | "SPACE_BETWEEN" | undefined;
     counterAxisAlignItems?: "CENTER" | "MIN" | "MAX" | undefined;
     itemSpacing?: number | undefined;
@@ -307,31 +327,21 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
     layoutSizingHorizontal?: "FILL" | "FIXED" | "HUG" | undefined;
     layoutSizingVertical?: "FILL" | "FIXED" | "HUG" | undefined;
     characters?: string | undefined;
-    fontSize?: number | undefined;
-    fontFamily?: string | undefined;
-    fontWeight?: string | number | undefined;
     textAlignHorizontal?: "CENTER" | "LEFT" | "RIGHT" | "JUSTIFIED" | undefined;
     textAlignVertical?: "CENTER" | "TOP" | "BOTTOM" | undefined;
     textAutoResize?: "NONE" | "WIDTH_AND_HEIGHT" | "HEIGHT" | "TRUNCATE" | undefined;
-    lineHeight?: number | {
-        value: number;
-        unit: "PIXELS" | "PERCENT" | "AUTO";
-    } | undefined;
-    letterSpacing?: number | undefined;
-    textDecoration?: "NONE" | "UNDERLINE" | "STRIKETHROUGH" | undefined;
-    textCase?: "ORIGINAL" | "UPPER" | "LOWER" | "TITLE" | undefined;
+    fillStyleId?: string | undefined;
+    textStyleId?: string | undefined;
+    effectStyleId?: string | undefined;
     locked?: boolean | undefined;
     swapComponent?: string | undefined;
 }, {
     x?: number | undefined;
     y?: number | undefined;
     name?: string | undefined;
-    opacity?: number | undefined;
-    visible?: boolean | undefined;
-    width?: number | undefined;
-    height?: number | undefined;
     fills?: {
         type: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE";
+        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
         color?: string | undefined;
         opacity?: number | undefined;
         visible?: boolean | undefined;
@@ -340,16 +350,18 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
             position: number;
         }[] | undefined;
         gradientTransform?: [[number, number, number], [number, number, number]] | undefined;
-        scaleMode?: "FILL" | "FIT" | "CROP" | "TILE" | undefined;
+        imageUrl?: string | undefined;
     }[] | undefined;
-    strokes?: {
-        color: string;
-        weight: number;
-        type?: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE" | undefined;
-        opacity?: number | undefined;
-        align?: "INSIDE" | "OUTSIDE" | "CENTER" | undefined;
-        dashPattern?: number[] | undefined;
-    }[] | undefined;
+    fontFamily?: string | undefined;
+    fontSize?: number | undefined;
+    fontWeight?: string | number | undefined;
+    lineHeight?: number | {
+        value: number;
+        unit: "PIXELS" | "PERCENT" | "AUTO";
+    } | undefined;
+    letterSpacing?: number | undefined;
+    textDecoration?: "NONE" | "UNDERLINE" | "STRIKETHROUGH" | undefined;
+    textCase?: "ORIGINAL" | "UPPER" | "LOWER" | "TITLE" | undefined;
     effects?: {
         type: "DROP_SHADOW" | "INNER_SHADOW" | "LAYER_BLUR" | "BACKGROUND_BLUR";
         radius: number;
@@ -362,9 +374,21 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
         } | undefined;
         spread?: number | undefined;
     }[] | undefined;
+    opacity?: number | undefined;
+    visible?: boolean | undefined;
+    width?: number | undefined;
+    height?: number | undefined;
+    strokes?: {
+        color: string;
+        weight: number;
+        type?: "SOLID" | "GRADIENT_LINEAR" | "GRADIENT_RADIAL" | "GRADIENT_ANGULAR" | "GRADIENT_DIAMOND" | "IMAGE" | undefined;
+        opacity?: number | undefined;
+        align?: "INSIDE" | "OUTSIDE" | "CENTER" | undefined;
+        dashPattern?: number[] | undefined;
+    }[] | undefined;
     cornerRadius?: number | [number, number, number, number] | undefined;
     clipsContent?: boolean | undefined;
-    layoutMode?: "HORIZONTAL" | "VERTICAL" | "NONE" | undefined;
+    layoutMode?: "NONE" | "HORIZONTAL" | "VERTICAL" | undefined;
     primaryAxisAlignItems?: "CENTER" | "MIN" | "MAX" | "SPACE_BETWEEN" | undefined;
     counterAxisAlignItems?: "CENTER" | "MIN" | "MAX" | undefined;
     itemSpacing?: number | undefined;
@@ -372,19 +396,12 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
     layoutSizingHorizontal?: "FILL" | "FIXED" | "HUG" | undefined;
     layoutSizingVertical?: "FILL" | "FIXED" | "HUG" | undefined;
     characters?: string | undefined;
-    fontSize?: number | undefined;
-    fontFamily?: string | undefined;
-    fontWeight?: string | number | undefined;
     textAlignHorizontal?: "CENTER" | "LEFT" | "RIGHT" | "JUSTIFIED" | undefined;
     textAlignVertical?: "CENTER" | "TOP" | "BOTTOM" | undefined;
     textAutoResize?: "NONE" | "WIDTH_AND_HEIGHT" | "HEIGHT" | "TRUNCATE" | undefined;
-    lineHeight?: number | {
-        value: number;
-        unit: "PIXELS" | "PERCENT" | "AUTO";
-    } | undefined;
-    letterSpacing?: number | undefined;
-    textDecoration?: "NONE" | "UNDERLINE" | "STRIKETHROUGH" | undefined;
-    textCase?: "ORIGINAL" | "UPPER" | "LOWER" | "TITLE" | undefined;
+    fillStyleId?: string | undefined;
+    textStyleId?: string | undefined;
+    effectStyleId?: string | undefined;
     locked?: boolean | undefined;
     swapComponent?: string | undefined;
 }>;

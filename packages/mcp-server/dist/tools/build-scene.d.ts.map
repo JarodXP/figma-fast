@@ -1,1 +1,1 @@
-{"version":3,"file":"build-scene.d.ts","sourceRoot":"","sources":["../../src/tools/build-scene.ts"],"names":[],"mappings":"AAAA;;GAEG;AAGH,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,yCAAyC,CAAC;AA6GzE,wBAAgB,sBAAsB,CAAC,MAAM,EAAE,SAAS,GAAG,IAAI,CAqG9D"}
+{"version":3,"file":"build-scene.d.ts","sourceRoot":"","sources":["../../src/tools/build-scene.ts"],"names":[],"mappings":"AAAA;;GAEG;AAGH,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,yCAAyC,CAAC;AA+KzE,wBAAgB,sBAAsB,CAAC,MAAM,EAAE,SAAS,GAAG,IAAI,CA0G9D"}

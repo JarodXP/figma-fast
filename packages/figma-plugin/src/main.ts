@@ -3,7 +3,7 @@
  * Runs in the Figma sandbox — communicates with UI iframe via postMessage.
  */
 
-import type { SceneNode as SceneSpec } from '@figma-fast/shared';
+import type { SceneNode as SceneSpec, Fill, Effect as EffectSpec } from '@figma-fast/shared';
 import { buildScene } from './scene-builder/index.js';
 import {
   handleGetDocumentInfo,
@@ -19,6 +19,14 @@ import {
   handleConvertToComponent,
   handleCombineAsVariants,
   handleManageComponentProperties,
+  handleCreatePage,
+  handleRenamePage,
+  handleSetCurrentPage,
+  handleCreatePaintStyle,
+  handleCreateTextStyle,
+  handleCreateEffectStyle,
+  handleSetImageFill,
+  handleBooleanOperation,
 } from './handlers.js';
 
 // Show plugin UI
@@ -47,7 +55,11 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
       break;
 
     case 'build_scene':
-      buildScene(msg.spec as SceneSpec, msg.parentId as string | undefined)
+      buildScene(
+        msg.spec as SceneSpec,
+        msg.parentId as string | undefined,
+        msg.imagePayloads as Record<string, string> | undefined,
+      )
         .then((result) => {
           figma.ui.postMessage({
             type: 'result',
@@ -154,6 +166,70 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
           variantOptions?: string[];
         }>,
       )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Page Management Tools ────────────────────────────────
+
+    case 'create_page':
+      handleCreatePage(msg.name as string)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'rename_page':
+      handleRenamePage(msg.pageId as string, msg.name as string)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'set_current_page':
+      handleSetCurrentPage(msg.pageId as string)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Style Creation Tools ─────────────────────────────────
+
+    case 'create_paint_style':
+      handleCreatePaintStyle(msg.name as string, msg.fills as Fill[]) // Fill from @figma-fast/shared
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'create_text_style':
+      handleCreateTextStyle(msg.name as string, {
+        fontFamily: msg.fontFamily as string | undefined,
+        fontSize: msg.fontSize as number | undefined,
+        fontWeight: msg.fontWeight as number | string | undefined,
+        lineHeight: msg.lineHeight as number | { value: number; unit: 'PIXELS' | 'PERCENT' | 'AUTO' } | undefined,
+        letterSpacing: msg.letterSpacing as number | undefined,
+        textDecoration: msg.textDecoration as string | undefined,
+        textCase: msg.textCase as string | undefined,
+      })
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'create_effect_style':
+      handleCreateEffectStyle(msg.name as string, msg.effects as EffectSpec[])
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Image Fill Tools ─────────────────────────────────────
+
+    case 'set_image_fill':
+      handleSetImageFill(msg.nodeId as string, msg.imageData as string, msg.scaleMode as string | undefined)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // ─── Boolean Operation Tools ──────────────────────────────
+
+    case 'boolean_operation':
+      handleBooleanOperation(msg.operation as string, msg.nodeIds as string[])
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

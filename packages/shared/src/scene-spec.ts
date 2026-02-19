@@ -38,6 +38,7 @@ export interface Fill {
   gradientStops?: GradientStop[];
   gradientTransform?: [[number, number, number], [number, number, number]];
   imageRef?: string;
+  imageUrl?: string; // URL for IMAGE fill type — server downloads the image
   scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
 }
 
@@ -132,6 +133,14 @@ export interface SceneNode {
 
   // Component / Component Set
   componentDescription?: string;
+
+  // Style binding — apply Figma style IDs from get_styles (overrides individual properties)
+  /** Figma paint style ID to bind (from get_styles). Overrides fills array if set. */
+  fillStyleId?: string;
+  /** Figma text style ID to bind (from get_styles). Sets font, size, etc. */
+  textStyleId?: string;
+  /** Figma effect style ID to bind (from get_styles). Overrides effects array if set. */
+  effectStyleId?: string;
 
   // Children
   children?: SceneNode[];

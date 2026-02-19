@@ -176,3 +176,59 @@ describe('ModifyPropertiesSchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+// Phase 8: Image Fill schema tests (TEST-P8-008, TEST-P8-003)
+describe('Phase 8 image fill schema', () => {
+  // TEST-P8-008: FillSchema accepts imageUrl field
+  it('FillSchema accepts IMAGE fill with imageUrl', () => {
+    const result = FillSchema.safeParse({
+      type: 'IMAGE',
+      imageUrl: 'https://example.com/photo.png',
+      scaleMode: 'FILL',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // TEST-P8-003: FillSchema rejects invalid imageUrl
+  it('FillSchema rejects invalid imageUrl (not-a-url)', () => {
+    const result = FillSchema.safeParse({
+      type: 'IMAGE',
+      imageUrl: 'not-a-url',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// Phase 7A: Style Binding schema tests (TEST-P7A-001 through TEST-P7A-004)
+describe('Phase 7A style binding schema', () => {
+  // TEST-P7A-001: SceneNodeSchema accepts fillStyleId field
+  it('SceneNodeSchema accepts fillStyleId field', () => {
+    const result = SceneNodeSchema.safeParse({ type: 'RECTANGLE', fillStyleId: 'S:abc123,1:1' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.fillStyleId).toBe('S:abc123,1:1');
+    }
+  });
+
+  // TEST-P7A-002: SceneNodeSchema accepts textStyleId field
+  it('SceneNodeSchema accepts textStyleId field', () => {
+    const result = SceneNodeSchema.safeParse({ type: 'TEXT', characters: 'Hello', textStyleId: 'S:def456,2:2' });
+    expect(result.success).toBe(true);
+  });
+
+  // TEST-P7A-003: SceneNodeSchema accepts effectStyleId field
+  it('SceneNodeSchema accepts effectStyleId field', () => {
+    const result = SceneNodeSchema.safeParse({ type: 'FRAME', effectStyleId: 'S:ghi789,3:3' });
+    expect(result.success).toBe(true);
+  });
+
+  // TEST-P7A-004: ModifyPropertiesSchema accepts all three style ID fields
+  it('ModifyPropertiesSchema accepts fillStyleId, textStyleId, and effectStyleId', () => {
+    const result = ModifyPropertiesSchema.safeParse({
+      fillStyleId: 'S:abc,1:1',
+      textStyleId: 'S:def,2:2',
+      effectStyleId: 'S:ghi,3:3',
+    });
+    expect(result.success).toBe(true);
+  });
+});

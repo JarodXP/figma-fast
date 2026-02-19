@@ -2,7 +2,7 @@
  * WebSocket message protocol types for FigmaFast.
  * All communication between MCP server and Figma plugin uses these types.
  */
-import type { SceneNode } from './scene-spec.js';
+import type { SceneNode, Fill, Effect, LineHeight, TextDecoration, TextCase } from './scene-spec.js';
 /** Modification to apply to an existing node */
 export interface Modification {
     nodeId: string;
@@ -24,6 +24,8 @@ export type ServerToPluginMessage = {
     id: string;
     spec: SceneNode;
     parentId?: string;
+    /** Map of imageUrl -> base64 image data for IMAGE fills */
+    imagePayloads?: Record<string, string>;
 } | {
     type: 'batch_modify';
     id: string;
@@ -92,6 +94,51 @@ export type ServerToPluginMessage = {
     componentId: string;
     action: 'add' | 'update' | 'delete';
     properties: ComponentPropertyDefinition[];
+} | {
+    type: 'create_page';
+    id: string;
+    name: string;
+} | {
+    type: 'rename_page';
+    id: string;
+    pageId: string;
+    name: string;
+} | {
+    type: 'set_current_page';
+    id: string;
+    pageId: string;
+} | {
+    type: 'create_paint_style';
+    id: string;
+    name: string;
+    fills: Fill[];
+} | {
+    type: 'create_text_style';
+    id: string;
+    name: string;
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: number | string;
+    lineHeight?: number | LineHeight;
+    letterSpacing?: number;
+    textDecoration?: TextDecoration;
+    textCase?: TextCase;
+} | {
+    type: 'create_effect_style';
+    id: string;
+    name: string;
+    effects: Effect[];
+} | {
+    type: 'set_image_fill';
+    id: string;
+    nodeId: string;
+    imageData: string;
+    scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
+} | {
+    type: 'boolean_operation';
+    id: string;
+    operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE';
+    nodeIds: string[];
 };
 /** Messages sent from Figma plugin to MCP server */
 export type PluginToServerMessage = {
