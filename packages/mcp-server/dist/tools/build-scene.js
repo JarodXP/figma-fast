@@ -6,94 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerBuildSceneTool = registerBuildSceneTool;
 const zod_1 = require("zod");
 const server_js_1 = require("../ws/server.js");
-// ─── Zod Sub-Schemas ────────────────────────────────────────────
-const FillSchema = zod_1.z.object({
-    type: zod_1.z.enum(['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE']),
-    color: zod_1.z.string().optional().describe('Hex color: #RGB, #RRGGBB, or #RRGGBBAA'),
-    opacity: zod_1.z.number().min(0).max(1).optional(),
-    visible: zod_1.z.boolean().optional(),
-    gradientStops: zod_1.z.array(zod_1.z.object({
-        position: zod_1.z.number(),
-        color: zod_1.z.string(),
-    })).optional(),
-    gradientTransform: zod_1.z.tuple([
-        zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number()]),
-        zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number()]),
-    ]).optional(),
-    scaleMode: zod_1.z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
-});
-const StrokeSchema = zod_1.z.object({
-    type: zod_1.z.enum(['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE']).optional(),
-    color: zod_1.z.string().describe('Hex color: #RRGGBB or #RRGGBBAA'),
-    weight: zod_1.z.number(),
-    align: zod_1.z.enum(['INSIDE', 'OUTSIDE', 'CENTER']).optional(),
-    opacity: zod_1.z.number().min(0).max(1).optional(),
-    dashPattern: zod_1.z.array(zod_1.z.number()).optional(),
-});
-const EffectSchema = zod_1.z.object({
-    type: zod_1.z.enum(['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR']),
-    color: zod_1.z.string().optional().describe('Hex color for shadows'),
-    offset: zod_1.z.object({ x: zod_1.z.number(), y: zod_1.z.number() }).optional(),
-    radius: zod_1.z.number(),
-    spread: zod_1.z.number().optional(),
-    visible: zod_1.z.boolean().optional(),
-    opacity: zod_1.z.number().min(0).max(1).optional(),
-});
-const LineHeightSchema = zod_1.z.object({
-    value: zod_1.z.number(),
-    unit: zod_1.z.enum(['PIXELS', 'PERCENT', 'AUTO']),
-});
-// ─── Recursive SceneNode Schema ────────────────────────────────
-const SceneNodeSchema = zod_1.z.lazy(() => zod_1.z.object({
-    id: zod_1.z.string().optional().describe('Client-assigned ID for referencing this node later'),
-    type: zod_1.z.enum(['FRAME', 'TEXT', 'RECTANGLE', 'ELLIPSE', 'GROUP', 'COMPONENT', 'COMPONENT_SET', 'COMPONENT_INSTANCE', 'POLYGON', 'STAR', 'LINE', 'VECTOR']),
-    name: zod_1.z.string().optional(),
-    // Geometry
-    x: zod_1.z.number().optional(),
-    y: zod_1.z.number().optional(),
-    width: zod_1.z.number().optional(),
-    height: zod_1.z.number().optional(),
-    // Style
-    fills: zod_1.z.array(FillSchema).optional(),
-    strokes: zod_1.z.array(StrokeSchema).optional(),
-    effects: zod_1.z.array(EffectSchema).optional(),
-    opacity: zod_1.z.number().min(0).max(1).optional(),
-    cornerRadius: zod_1.z.union([zod_1.z.number(), zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number(), zod_1.z.number()])]).optional(),
-    clipsContent: zod_1.z.boolean().optional(),
-    // Auto-layout
-    layoutMode: zod_1.z.enum(['HORIZONTAL', 'VERTICAL', 'NONE']).optional(),
-    primaryAxisAlignItems: zod_1.z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional(),
-    counterAxisAlignItems: zod_1.z.enum(['MIN', 'CENTER', 'MAX']).optional(),
-    itemSpacing: zod_1.z.number().optional(),
-    padding: zod_1.z.union([zod_1.z.number(), zod_1.z.tuple([zod_1.z.number(), zod_1.z.number(), zod_1.z.number(), zod_1.z.number()])]).optional(),
-    // Sizing (auto-layout children)
-    layoutSizingHorizontal: zod_1.z.enum(['FIXED', 'HUG', 'FILL']).optional(),
-    layoutSizingVertical: zod_1.z.enum(['FIXED', 'HUG', 'FILL']).optional(),
-    // Text
-    characters: zod_1.z.string().optional(),
-    fontSize: zod_1.z.number().optional(),
-    fontFamily: zod_1.z.string().optional(),
-    fontWeight: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).optional(),
-    fontStyle: zod_1.z.string().optional(),
-    textAlignHorizontal: zod_1.z.enum(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED']).optional(),
-    textAlignVertical: zod_1.z.enum(['TOP', 'CENTER', 'BOTTOM']).optional(),
-    textAutoResize: zod_1.z.enum(['WIDTH_AND_HEIGHT', 'HEIGHT', 'NONE', 'TRUNCATE']).optional(),
-    lineHeight: zod_1.z.union([zod_1.z.number(), LineHeightSchema]).optional(),
-    letterSpacing: zod_1.z.number().optional(),
-    textDecoration: zod_1.z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
-    textCase: zod_1.z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
-    // Component instance
-    componentKey: zod_1.z.string().optional().describe('Component key for published library components'),
-    componentId: zod_1.z.string().optional().describe('Node ID for local components (e.g. "121:317")'),
-    overrides: zod_1.z.record(zod_1.z.union([zod_1.z.string(), zod_1.z.boolean()])).optional().describe('Property overrides for COMPONENT_INSTANCE — keys are property names, values are strings or booleans'),
-    // Component / Component Set
-    componentDescription: zod_1.z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
-    // Children
-    children: zod_1.z.array(zod_1.z.lazy(() => SceneNodeSchema)).optional(),
-    // Visibility
-    visible: zod_1.z.boolean().optional(),
-    locked: zod_1.z.boolean().optional(),
-}));
+const schemas_js_1 = require("../schemas.js");
 // ─── Tool Description ──────────────────────────────────────────
 const TOOL_DESCRIPTION = `Build an entire Figma design in a single call using a declarative scene specification.
 
@@ -198,15 +111,20 @@ Example 4 — Button component with variants:
 // ─── Tool Registration ─────────────────────────────────────────
 function registerBuildSceneTool(server) {
     server.tool('build_scene', TOOL_DESCRIPTION, {
-        scene: SceneNodeSchema.describe('The root node of the scene tree to build'),
-        parentNodeId: zod_1.z.string().optional().describe('Figma node ID to build into. If omitted, builds on the current page.'),
+        scene: schemas_js_1.SceneNodeSchema.describe('The root node of the scene tree to build'),
+        parentNodeId: zod_1.z
+            .string()
+            .optional()
+            .describe('Figma node ID to build into. If omitted, builds on the current page.'),
     }, async (params) => {
         if (!(0, server_js_1.isPluginConnected)()) {
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }
@@ -223,13 +141,15 @@ function registerBuildSceneTool(server) {
                     text += `Root node ID: ${data.rootNodeId}\n`;
                     text += `Nodes created: ${data.nodeCount}`;
                     if (data.fontSubstitutions.length > 0) {
-                        text += `\n\nFont substitutions:\n${data.fontSubstitutions.map(s => `  - ${s}`).join('\n')}`;
+                        text += `\n\nFont substitutions:\n${data.fontSubstitutions.map((s) => `  - ${s}`).join('\n')}`;
                     }
                     if (data.errors.length > 0) {
-                        text += `\n\nWarnings:\n${data.errors.map(e => `  - ${e}`).join('\n')}`;
+                        text += `\n\nWarnings:\n${data.errors.map((e) => `  - ${e}`).join('\n')}`;
                     }
                     if (Object.keys(data.nodeIdMap).length > 0) {
-                        text += `\n\nNode ID map:\n${Object.entries(data.nodeIdMap).map(([k, v]) => `  ${k} → ${v}`).join('\n')}`;
+                        text += `\n\nNode ID map:\n${Object.entries(data.nodeIdMap)
+                            .map(([k, v]) => `  ${k} → ${v}`)
+                            .join('\n')}`;
                     }
                     return {
                         content: [{ type: 'text', text }],
@@ -237,28 +157,34 @@ function registerBuildSceneTool(server) {
                 }
                 else {
                     return {
-                        content: [{
+                        content: [
+                            {
                                 type: 'text',
                                 text: `Build failed: ${response.error ?? 'Unknown error'}`,
-                            }],
+                            },
+                        ],
                         isError: true,
                     };
                 }
             }
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: `Unexpected response type: ${response.type}`,
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: `Build scene failed: ${err instanceof Error ? err.message : String(err)}`,
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }

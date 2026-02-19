@@ -7,10 +7,12 @@ exports.registerComponentTools = registerComponentTools;
 const zod_1 = require("zod");
 const server_js_1 = require("../ws/server.js");
 const NOT_CONNECTED = {
-    content: [{
+    content: [
+        {
             type: 'text',
             text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-        }],
+        },
+    ],
     isError: true,
 };
 const TIMEOUT = 30_000;
@@ -32,20 +34,32 @@ Example: { "nodeId": "123:456" }`, {
             if (response.type === 'result' && response.success) {
                 const data = response.data;
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: 'text',
                             text: `Converted to Component "${data.name}"\nComponent ID: ${data.componentId}\nComponent key: ${data.componentKey}`,
-                        }],
+                        },
+                    ],
                 };
             }
             return {
-                content: [{ type: 'text', text: `Convert failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Convert failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `convert_to_component failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `convert_to_component failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -70,20 +84,32 @@ Example: { "nodeIds": ["123:1", "123:2", "123:3"], "name": "Button" }`, {
             if (response.type === 'result' && response.success) {
                 const data = response.data;
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: 'text',
                             text: `Created Component Set "${data.name}" with ${data.variantCount} variants\nComponent Set ID: ${data.componentSetId}\nComponent Set key: ${data.componentSetKey}`,
-                        }],
+                        },
+                    ],
                 };
             }
             return {
-                content: [{ type: 'text', text: `Combine failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Combine failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `combine_as_variants failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `combine_as_variants failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -100,12 +126,15 @@ Example — delete properties:
 { "componentId": "123:456", "action": "delete", "properties": [{ "name": "Show Icon", "type": "BOOLEAN", "defaultValue": true }] }`, {
         componentId: zod_1.z.string().describe('The Component or Component Set node ID'),
         action: zod_1.z.enum(['add', 'update', 'delete']).describe('Action to perform on the properties'),
-        properties: zod_1.z.array(zod_1.z.object({
+        properties: zod_1.z
+            .array(zod_1.z.object({
             name: zod_1.z.string().describe('Property name'),
             type: zod_1.z.enum(['BOOLEAN', 'TEXT', 'INSTANCE_SWAP', 'VARIANT']).describe('Property type'),
             defaultValue: zod_1.z.union([zod_1.z.string(), zod_1.z.boolean()]).describe('Default value for the property'),
             variantOptions: zod_1.z.array(zod_1.z.string()).optional().describe('Options for VARIANT type properties'),
-        })).min(1).describe('Property definitions to add/update/delete'),
+        }))
+            .min(1)
+            .describe('Property definitions to add/update/delete'),
     }, async (params) => {
         if (!(0, server_js_1.isPluginConnected)())
             return NOT_CONNECTED;
@@ -119,20 +148,32 @@ Example — delete properties:
             if (response.type === 'result' && response.success) {
                 const data = response.data;
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: 'text',
                             text: `${data.action} ${data.propertiesModified} properties on "${data.name}" (${data.componentId})`,
-                        }],
+                        },
+                    ],
                 };
             }
             return {
-                content: [{ type: 'text', text: `Manage properties failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Manage properties failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `manage_component_properties failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `manage_component_properties failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }

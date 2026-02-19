@@ -97,7 +97,7 @@ function handlePluginMessage(msg: PluginToServerMessage): void {
  */
 export function sendToPlugin(
   message: DistributiveOmit<ServerToPluginMessage, 'id'>,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<PluginToServerMessage> {
   return new Promise((resolve, reject) => {
     if (!pluginSocket || pluginSocket.readyState !== WebSocket.OPEN) {

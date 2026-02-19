@@ -7,10 +7,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { sendToPlugin, isPluginConnected } from '../ws/server.js';
 
 const NOT_CONNECTED = {
-  content: [{
-    type: 'text' as const,
-    text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-  }],
+  content: [
+    {
+      type: 'text' as const,
+      text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
+    },
+  ],
   isError: true,
 };
 
@@ -34,16 +36,26 @@ export function registerReadTools(server: McpServer): void {
           };
         }
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_document_info failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_document_info failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── get_node_info ───────────────────────────────────────────
@@ -53,17 +65,26 @@ export function registerReadTools(server: McpServer): void {
     'Get detailed properties of a Figma node by ID. Returns fills, strokes, effects, text properties, auto-layout settings, and children. Use depth to control how many levels of children to include (default 1). Use depth=0 for just the node with child summaries.',
     {
       nodeId: z.string().describe('The Figma node ID (e.g. "123:456")'),
-      depth: z.number().int().min(0).max(10).optional().describe('How many levels of children to include with full properties (default 1). 0 = child summaries only.'),
+      depth: z
+        .number()
+        .int()
+        .min(0)
+        .max(10)
+        .optional()
+        .describe('How many levels of children to include with full properties (default 1). 0 = child summaries only.'),
     },
     async (params) => {
       if (!isPluginConnected()) return NOT_CONNECTED;
 
       try {
-        const response = await sendToPlugin({
-          type: 'get_node_info',
-          nodeId: params.nodeId,
-          depth: params.depth,
-        }, TIMEOUT);
+        const response = await sendToPlugin(
+          {
+            type: 'get_node_info',
+            nodeId: params.nodeId,
+            depth: params.depth,
+          },
+          TIMEOUT,
+        );
 
         if (response.type === 'result' && response.success) {
           return {
@@ -71,16 +92,26 @@ export function registerReadTools(server: McpServer): void {
           };
         }
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_node_info failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_node_info failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── get_selection ───────────────────────────────────────────
@@ -100,16 +131,26 @@ export function registerReadTools(server: McpServer): void {
           };
         }
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_selection failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_selection failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── get_styles ──────────────────────────────────────────────
@@ -129,16 +170,23 @@ export function registerReadTools(server: McpServer): void {
           };
         }
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_styles failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            { type: 'text' as const, text: `get_styles failed: ${err instanceof Error ? err.message : String(err)}` },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── get_local_components ────────────────────────────────────
@@ -158,16 +206,26 @@ export function registerReadTools(server: McpServer): void {
           };
         }
         return {
-          content: [{ type: 'text' as const, text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_local_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_local_components failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── get_library_components ──────────────────────────────────
@@ -189,7 +247,12 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
       const token = process.env.FIGMA_API_TOKEN;
       if (!token) {
         return {
-          content: [{ type: 'text' as const, text: 'FIGMA_API_TOKEN environment variable is not set. Set it to a Figma personal access token.' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'FIGMA_API_TOKEN environment variable is not set. Set it to a Figma personal access token.',
+            },
+          ],
           isError: true,
         };
       }
@@ -208,7 +271,7 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
           };
         }
 
-        const data = await resp.json() as {
+        const data = (await resp.json()) as {
           meta: {
             components: Array<{
               key: string;
@@ -223,12 +286,12 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
 
         if (params.query) {
           const lower = params.query.toLowerCase();
-          components = components.filter(c => c.name.toLowerCase().includes(lower));
+          components = components.filter((c) => c.name.toLowerCase().includes(lower));
         }
 
         const result = {
           count: components.length,
-          components: components.map(c => ({
+          components: components.map((c) => ({
             name: c.name,
             key: c.key,
             description: c.description,
@@ -241,11 +304,16 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // ─── export_node_as_image ────────────────────────────────────
@@ -265,12 +333,15 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
         const format = params.format ?? 'PNG';
         const scale = params.scale ?? 1;
 
-        const response = await sendToPlugin({
-          type: 'export_node',
-          nodeId: params.nodeId,
-          format,
-          scale,
-        }, TIMEOUT);
+        const response = await sendToPlugin(
+          {
+            type: 'export_node',
+            nodeId: params.nodeId,
+            format,
+            scale,
+          },
+          TIMEOUT,
+        );
 
         if (response.type === 'result' && response.success) {
           const data = response.data as {
@@ -293,24 +364,36 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
           // PNG/JPG: return as MCP image content
           const mimeType = format === 'JPG' ? 'image/jpeg' : format === 'PDF' ? 'application/pdf' : 'image/png';
           return {
-            content: [{
-              type: 'image' as const,
-              data: data.base64,
-              mimeType,
-            }],
+            content: [
+              {
+                type: 'image' as const,
+                data: data.base64,
+                mimeType,
+              },
+            ],
           };
         }
 
         return {
-          content: [{ type: 'text' as const, text: `Export failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Export failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `export_node_as_image failed: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `export_node_as_image failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 }

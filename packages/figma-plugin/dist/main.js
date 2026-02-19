@@ -75,12 +75,76 @@
     }
   });
 
+  // ../shared/dist/fonts.js
+  var require_fonts = __commonJS({
+    "../shared/dist/fonts.js"(exports) {
+      "use strict";
+      Object.defineProperty(exports, "__esModule", { value: true });
+      exports.getFontStyle = getFontStyle2;
+      exports.collectFonts = collectFonts2;
+      var FALLBACK_FONT = { family: "Inter", style: "Regular" };
+      function getFontStyle2(weight) {
+        if (typeof weight === "string")
+          return weight;
+        switch (weight) {
+          case 100:
+            return "Thin";
+          case 200:
+            return "Extra Light";
+          case 300:
+            return "Light";
+          case 400:
+            return "Regular";
+          case 500:
+            return "Medium";
+          case 600:
+            return "Semi Bold";
+          case 700:
+            return "Bold";
+          case 800:
+            return "Extra Bold";
+          case 900:
+            return "Black";
+          default:
+            return "Regular";
+        }
+      }
+      function collectFonts2(spec) {
+        const seen = /* @__PURE__ */ new Set();
+        const fonts = [];
+        function walk(node) {
+          var _a;
+          if (node.type === "TEXT") {
+            const family = (_a = node.fontFamily) != null ? _a : "Inter";
+            const style = getFontStyle2(node.fontWeight);
+            const key = `${family}::${style}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              fonts.push({ family, style });
+            }
+          }
+          if (node.children) {
+            for (const child of node.children) {
+              walk(child);
+            }
+          }
+        }
+        walk(spec);
+        const fallbackKey = `${FALLBACK_FONT.family}::${FALLBACK_FONT.style}`;
+        if (!seen.has(fallbackKey)) {
+          fonts.push(FALLBACK_FONT);
+        }
+        return fonts;
+      }
+    }
+  });
+
   // ../shared/dist/index.js
   var require_dist = __commonJS({
     "../shared/dist/index.js"(exports) {
       "use strict";
       Object.defineProperty(exports, "__esModule", { value: true });
-      exports.rgbaToHex = exports.hexToRgba = void 0;
+      exports.collectFonts = exports.getFontStyle = exports.rgbaToHex = exports.hexToRgba = void 0;
       var colors_js_1 = require_colors();
       Object.defineProperty(exports, "hexToRgba", { enumerable: true, get: function() {
         return colors_js_1.hexToRgba;
@@ -88,63 +152,18 @@
       Object.defineProperty(exports, "rgbaToHex", { enumerable: true, get: function() {
         return colors_js_1.rgbaToHex;
       } });
+      var fonts_js_1 = require_fonts();
+      Object.defineProperty(exports, "getFontStyle", { enumerable: true, get: function() {
+        return fonts_js_1.getFontStyle;
+      } });
+      Object.defineProperty(exports, "collectFonts", { enumerable: true, get: function() {
+        return fonts_js_1.collectFonts;
+      } });
     }
   });
 
   // src/scene-builder/fonts.ts
-  var FALLBACK_FONT = { family: "Inter", style: "Regular" };
-  function getFontStyle(weight) {
-    if (typeof weight === "string") return weight;
-    switch (weight) {
-      case 100:
-        return "Thin";
-      case 200:
-        return "Extra Light";
-      case 300:
-        return "Light";
-      case 400:
-        return "Regular";
-      case 500:
-        return "Medium";
-      case 600:
-        return "Semi Bold";
-      case 700:
-        return "Bold";
-      case 800:
-        return "Extra Bold";
-      case 900:
-        return "Black";
-      default:
-        return "Regular";
-    }
-  }
-  function collectFonts(spec) {
-    const seen = /* @__PURE__ */ new Set();
-    const fonts = [];
-    function walk(node) {
-      var _a;
-      if (node.type === "TEXT") {
-        const family = (_a = node.fontFamily) != null ? _a : "Inter";
-        const style = getFontStyle(node.fontWeight);
-        const key = `${family}::${style}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          fonts.push({ family, style });
-        }
-      }
-      if (node.children) {
-        for (const child of node.children) {
-          walk(child);
-        }
-      }
-    }
-    walk(spec);
-    const fallbackKey = `${FALLBACK_FONT.family}::${FALLBACK_FONT.style}`;
-    if (!seen.has(fallbackKey)) {
-      fonts.push(FALLBACK_FONT);
-    }
-    return fonts;
-  }
+  var import_shared = __toESM(require_dist());
   function preloadFonts(fonts) {
     return __async(this, null, function* () {
       const failed = [];
@@ -163,7 +182,7 @@
   }
 
   // src/scene-builder/build-node.ts
-  var import_shared = __toESM(require_dist());
+  var import_shared2 = __toESM(require_dist());
   function createNode(spec) {
     return __async(this, null, function* () {
       switch (spec.type) {
@@ -214,7 +233,7 @@
       const figmaFills = fills.filter((f) => f.visible !== false).map((fill) => {
         var _a, _b, _c, _d;
         if (fill.type === "SOLID") {
-          const rgba = fill.color ? (0, import_shared.hexToRgba)(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
+          const rgba = fill.color ? (0, import_shared2.hexToRgba)(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
           return {
             type: "SOLID",
             color: { r: rgba.r, g: rgba.g, b: rgba.b },
@@ -223,13 +242,16 @@
         }
         if (fill.type === "GRADIENT_LINEAR" || fill.type === "GRADIENT_RADIAL" || fill.type === "GRADIENT_ANGULAR" || fill.type === "GRADIENT_DIAMOND") {
           const stops = ((_b = fill.gradientStops) != null ? _b : []).map((stop) => {
-            const c = (0, import_shared.hexToRgba)(stop.color);
+            const c = (0, import_shared2.hexToRgba)(stop.color);
             return { position: stop.position, color: { r: c.r, g: c.g, b: c.b, a: c.a } };
           });
           return {
             type: fill.type,
             gradientStops: stops,
-            gradientTransform: (_c = fill.gradientTransform) != null ? _c : [[1, 0, 0], [0, 1, 0]],
+            gradientTransform: (_c = fill.gradientTransform) != null ? _c : [
+              [1, 0, 0],
+              [0, 1, 0]
+            ],
             opacity: (_d = fill.opacity) != null ? _d : 1
           };
         }
@@ -248,7 +270,7 @@
     try {
       const figmaStrokes = strokes.map((stroke) => {
         var _a;
-        const rgba = (0, import_shared.hexToRgba)(stroke.color);
+        const rgba = (0, import_shared2.hexToRgba)(stroke.color);
         return {
           type: "SOLID",
           color: { r: rgba.r, g: rgba.g, b: rgba.b },
@@ -276,7 +298,7 @@
       const figmaEffects = effects.map((effect) => {
         var _a, _b, _c, _d, _e;
         if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
-          const rgba = effect.color ? (0, import_shared.hexToRgba)(effect.color) : { r: 0, g: 0, b: 0, a: 0.5 };
+          const rgba = effect.color ? (0, import_shared2.hexToRgba)(effect.color) : { r: 0, g: 0, b: 0, a: 0.5 };
           const alpha = (_a = effect.opacity) != null ? _a : rgba.a;
           return {
             type: effect.type,
@@ -344,7 +366,7 @@
       var _a, _b;
       try {
         const family = (_a = spec.fontFamily) != null ? _a : "Inter";
-        const style = getFontStyle(spec.fontWeight);
+        const style = (0, import_shared.getFontStyle)(spec.fontWeight);
         const fontKey = `${family}::${style}`;
         if (failedFonts.has(fontKey)) {
           node.fontName = { family: "Inter", style: "Regular" };
@@ -384,7 +406,9 @@
           node.textCase = spec.textCase;
         }
       } catch (err) {
-        errors.push(`applyTextProperties "${(_b = spec.name) != null ? _b : "(unnamed)"}": ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(
+          `applyTextProperties "${(_b = spec.name) != null ? _b : "(unnamed)"}": ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     });
   }
@@ -585,7 +609,7 @@
       } else {
         parent = figma.currentPage;
       }
-      const fontRefs = collectFonts(spec);
+      const fontRefs = (0, import_shared.collectFonts)(spec);
       const failedFontRefs = yield preloadFonts(fontRefs);
       const failedFonts = new Set(failedFontRefs.map((f) => `${f.family}::${f.style}`));
       const fontSubstitutions = failedFontRefs.map((f) => `${f.family} ${f.style} \u2192 Inter Regular`);
@@ -632,16 +656,16 @@
   }
 
   // src/handlers.ts
-  var import_shared3 = __toESM(require_dist());
+  var import_shared4 = __toESM(require_dist());
 
   // src/serialize-node.ts
-  var import_shared2 = __toESM(require_dist());
+  var import_shared3 = __toESM(require_dist());
   function serializePaint(paint) {
     var _a, _b, _c, _d, _e, _f;
     if (paint.type === "SOLID") {
       return {
         type: "SOLID",
-        color: (0, import_shared2.rgbaToHex)({ r: paint.color.r, g: paint.color.g, b: paint.color.b, a: 1 }),
+        color: (0, import_shared3.rgbaToHex)({ r: paint.color.r, g: paint.color.g, b: paint.color.b, a: 1 }),
         opacity: (_a = paint.opacity) != null ? _a : 1,
         visible: (_b = paint.visible) != null ? _b : true
       };
@@ -651,7 +675,7 @@
         type: paint.type,
         gradientStops: paint.gradientStops.map((stop) => ({
           position: stop.position,
-          color: (0, import_shared2.rgbaToHex)({ r: stop.color.r, g: stop.color.g, b: stop.color.b, a: stop.color.a })
+          color: (0, import_shared3.rgbaToHex)({ r: stop.color.r, g: stop.color.g, b: stop.color.b, a: stop.color.a })
         })),
         opacity: (_c = paint.opacity) != null ? _c : 1,
         visible: (_d = paint.visible) != null ? _d : true
@@ -673,7 +697,7 @@
       const shadow = effect;
       return {
         type: shadow.type,
-        color: (0, import_shared2.rgbaToHex)({ r: shadow.color.r, g: shadow.color.g, b: shadow.color.b, a: shadow.color.a }),
+        color: (0, import_shared3.rgbaToHex)({ r: shadow.color.r, g: shadow.color.g, b: shadow.color.b, a: shadow.color.a }),
         offset: shadow.offset,
         radius: shadow.radius,
         spread: (_a = shadow.spread) != null ? _a : 0,
@@ -781,11 +805,14 @@
       if (compSet.description) result.componentDescription = compSet.description;
       if (compSet.componentPropertyDefinitions) {
         result.componentPropertyDefinitions = Object.fromEntries(
-          Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [k, {
-            type: v.type,
-            defaultValue: v.defaultValue,
-            variantOptions: v.variantOptions
-          }])
+          Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [
+            k,
+            {
+              type: v.type,
+              defaultValue: v.defaultValue,
+              variantOptions: v.variantOptions
+            }
+          ])
         );
       }
     }
@@ -879,7 +906,7 @@
             if (paint.type === "SOLID") {
               return {
                 type: "SOLID",
-                color: (0, import_shared3.rgbaToHex)({ r: paint.color.r, g: paint.color.g, b: paint.color.b, a: 1 }),
+                color: (0, import_shared4.rgbaToHex)({ r: paint.color.r, g: paint.color.g, b: paint.color.b, a: 1 }),
                 opacity: (_a = paint.opacity) != null ? _a : 1
               };
             }
@@ -914,7 +941,7 @@
               const shadow = effect;
               return {
                 type: shadow.type,
-                color: (0, import_shared3.rgbaToHex)({ r: shadow.color.r, g: shadow.color.g, b: shadow.color.b, a: shadow.color.a }),
+                color: (0, import_shared4.rgbaToHex)({ r: shadow.color.r, g: shadow.color.g, b: shadow.color.b, a: shadow.color.a }),
                 offset: shadow.offset,
                 radius: shadow.radius,
                 spread: (_a = shadow.spread) != null ? _a : 0
@@ -1280,7 +1307,9 @@
             }
           }
         } catch (err) {
-          throw new Error(`Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`);
+          throw new Error(
+            `Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
       return {

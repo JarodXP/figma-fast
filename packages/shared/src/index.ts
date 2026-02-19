@@ -30,3 +30,6 @@ export type {
 
 export type { RgbaColor } from './colors.js';
 export { hexToRgba, rgbaToHex } from './colors.js';
+
+export type { FontRef } from './fonts.js';
+export { getFontStyle, collectFonts } from './fonts.js';

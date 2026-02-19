@@ -1,6 +1,7 @@
 {
   "name": "figma-fast",
   "private": true,
+  "type": "module",
   "workspaces": [
     "packages/*"
   ],
@@ -8,11 +9,21 @@
     "dev": "npm run dev --workspace=packages/mcp-server",
     "build": "npm run build --workspace=packages/shared && npm run build --workspace=packages/mcp-server && npm run build --workspace=packages/figma-plugin",
     "build:plugin": "npm run build --workspace=packages/figma-plugin",
-    "build:server": "npm run build --workspace=packages/shared && npm run build --workspace=packages/mcp-server"
+    "build:server": "npm run build --workspace=packages/shared && npm run build --workspace=packages/mcp-server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint 'packages/*/src/**/*.ts'",
+    "format:check": "prettier --check 'packages/*/src/**/*.ts'"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
+    "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

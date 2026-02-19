@@ -9,10 +9,12 @@ function registerPingTool(server) {
     server.tool('ping', 'Test connectivity with the Figma plugin. Returns pong if the plugin is connected and responsive.', {}, async () => {
         if (!(0, server_js_1.isPluginConnected)()) {
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }
@@ -22,26 +24,32 @@ function registerPingTool(server) {
             const rtt = Date.now() - start;
             if (response.type === 'pong') {
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: 'text',
                             text: `pong (${rtt}ms round-trip)`,
-                        }],
+                        },
+                    ],
                 };
             }
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: `Unexpected response type: ${response.type}`,
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{
+                content: [
+                    {
                         type: 'text',
                         text: `Ping failed: ${err instanceof Error ? err.message : String(err)}`,
-                    }],
+                    },
+                ],
                 isError: true,
             };
         }

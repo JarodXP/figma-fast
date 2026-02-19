@@ -7,10 +7,12 @@ exports.registerReadTools = registerReadTools;
 const zod_1 = require("zod");
 const server_js_1 = require("../ws/server.js");
 const NOT_CONNECTED = {
-    content: [{
+    content: [
+        {
             type: 'text',
             text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-        }],
+        },
+    ],
     isError: true,
 };
 const TIMEOUT = 30_000;
@@ -27,13 +29,23 @@ function registerReadTools(server) {
                 };
             }
             return {
-                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_document_info failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_document_info failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -41,7 +53,13 @@ function registerReadTools(server) {
     // ─── get_node_info ───────────────────────────────────────────
     server.tool('get_node_info', 'Get detailed properties of a Figma node by ID. Returns fills, strokes, effects, text properties, auto-layout settings, and children. Use depth to control how many levels of children to include (default 1). Use depth=0 for just the node with child summaries.', {
         nodeId: zod_1.z.string().describe('The Figma node ID (e.g. "123:456")'),
-        depth: zod_1.z.number().int().min(0).max(10).optional().describe('How many levels of children to include with full properties (default 1). 0 = child summaries only.'),
+        depth: zod_1.z
+            .number()
+            .int()
+            .min(0)
+            .max(10)
+            .optional()
+            .describe('How many levels of children to include with full properties (default 1). 0 = child summaries only.'),
     }, async (params) => {
         if (!(0, server_js_1.isPluginConnected)())
             return NOT_CONNECTED;
@@ -57,13 +75,23 @@ function registerReadTools(server) {
                 };
             }
             return {
-                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_node_info failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_node_info failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -80,13 +108,23 @@ function registerReadTools(server) {
                 };
             }
             return {
-                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_selection failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_selection failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -103,13 +141,20 @@ function registerReadTools(server) {
                 };
             }
             return {
-                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_styles failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    { type: 'text', text: `get_styles failed: ${err instanceof Error ? err.message : String(err)}` },
+                ],
                 isError: true,
             };
         }
@@ -126,13 +171,23 @@ function registerReadTools(server) {
                 };
             }
             return {
-                content: [{ type: 'text', text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_local_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_local_components failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -151,7 +206,12 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`, {
         const token = process.env.FIGMA_API_TOKEN;
         if (!token) {
             return {
-                content: [{ type: 'text', text: 'FIGMA_API_TOKEN environment variable is not set. Set it to a Figma personal access token.' }],
+                content: [
+                    {
+                        type: 'text',
+                        text: 'FIGMA_API_TOKEN environment variable is not set. Set it to a Figma personal access token.',
+                    },
+                ],
                 isError: true,
             };
         }
@@ -167,15 +227,15 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`, {
                     isError: true,
                 };
             }
-            const data = await resp.json();
+            const data = (await resp.json());
             let components = data.meta.components;
             if (params.query) {
                 const lower = params.query.toLowerCase();
-                components = components.filter(c => c.name.toLowerCase().includes(lower));
+                components = components.filter((c) => c.name.toLowerCase().includes(lower));
             }
             const result = {
                 count: components.length,
-                components: components.map(c => ({
+                components: components.map((c) => ({
                     name: c.name,
                     key: c.key,
                     description: c.description,
@@ -188,7 +248,12 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`, {
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_library_components failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }
@@ -223,21 +288,33 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`, {
                 // PNG/JPG: return as MCP image content
                 const mimeType = format === 'JPG' ? 'image/jpeg' : format === 'PDF' ? 'application/pdf' : 'image/png';
                 return {
-                    content: [{
+                    content: [
+                        {
                             type: 'image',
                             data: data.base64,
                             mimeType,
-                        }],
+                        },
+                    ],
                 };
             }
             return {
-                content: [{ type: 'text', text: `Export failed: ${response.type === 'result' ? response.error : 'Unexpected response'}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `Export failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
                 isError: true,
             };
         }
         catch (err) {
             return {
-                content: [{ type: 'text', text: `export_node_as_image failed: ${err instanceof Error ? err.message : String(err)}` }],
+                content: [
+                    {
+                        type: 'text',
+                        text: `export_node_as_image failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
                 isError: true,
             };
         }

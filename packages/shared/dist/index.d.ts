@@ -2,4 +2,6 @@ export type { NodeType, FillType, GradientStop, Fill, StrokeAlign, Stroke, Effec
 export type { ComponentPropertyDefinition, Modification, ServerToPluginMessage, PluginToServerMessage, WsMessage, } from './messages.js';
 export type { RgbaColor } from './colors.js';
 export { hexToRgba, rgbaToHex } from './colors.js';
+export type { FontRef } from './fonts.js';
+export { getFontStyle, collectFonts } from './fonts.js';
 //# sourceMappingURL=index.d.ts.map

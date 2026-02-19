@@ -5,112 +5,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { sendToPlugin, isPluginConnected } from '../ws/server.js';
-
-// ─── Zod Sub-Schemas ────────────────────────────────────────────
-
-const FillSchema = z.object({
-  type: z.enum(['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE']),
-  color: z.string().optional().describe('Hex color: #RGB, #RRGGBB, or #RRGGBBAA'),
-  opacity: z.number().min(0).max(1).optional(),
-  visible: z.boolean().optional(),
-  gradientStops: z.array(z.object({
-    position: z.number(),
-    color: z.string(),
-  })).optional(),
-  gradientTransform: z.tuple([
-    z.tuple([z.number(), z.number(), z.number()]),
-    z.tuple([z.number(), z.number(), z.number()]),
-  ]).optional(),
-  scaleMode: z.enum(['FILL', 'FIT', 'CROP', 'TILE']).optional(),
-});
-
-const StrokeSchema = z.object({
-  type: z.enum(['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE']).optional(),
-  color: z.string().describe('Hex color: #RRGGBB or #RRGGBBAA'),
-  weight: z.number(),
-  align: z.enum(['INSIDE', 'OUTSIDE', 'CENTER']).optional(),
-  opacity: z.number().min(0).max(1).optional(),
-  dashPattern: z.array(z.number()).optional(),
-});
-
-const EffectSchema = z.object({
-  type: z.enum(['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR']),
-  color: z.string().optional().describe('Hex color for shadows'),
-  offset: z.object({ x: z.number(), y: z.number() }).optional(),
-  radius: z.number(),
-  spread: z.number().optional(),
-  visible: z.boolean().optional(),
-  opacity: z.number().min(0).max(1).optional(),
-});
-
-const LineHeightSchema = z.object({
-  value: z.number(),
-  unit: z.enum(['PIXELS', 'PERCENT', 'AUTO']),
-});
-
-// ─── Recursive SceneNode Schema ────────────────────────────────
-
-const SceneNodeSchema: z.ZodType<any> = z.lazy(() =>
-  z.object({
-    id: z.string().optional().describe('Client-assigned ID for referencing this node later'),
-    type: z.enum(['FRAME', 'TEXT', 'RECTANGLE', 'ELLIPSE', 'GROUP', 'COMPONENT', 'COMPONENT_SET', 'COMPONENT_INSTANCE', 'POLYGON', 'STAR', 'LINE', 'VECTOR']),
-    name: z.string().optional(),
-
-    // Geometry
-    x: z.number().optional(),
-    y: z.number().optional(),
-    width: z.number().optional(),
-    height: z.number().optional(),
-
-    // Style
-    fills: z.array(FillSchema).optional(),
-    strokes: z.array(StrokeSchema).optional(),
-    effects: z.array(EffectSchema).optional(),
-    opacity: z.number().min(0).max(1).optional(),
-    cornerRadius: z.union([z.number(), z.tuple([z.number(), z.number(), z.number(), z.number()])]).optional(),
-    clipsContent: z.boolean().optional(),
-
-    // Auto-layout
-    layoutMode: z.enum(['HORIZONTAL', 'VERTICAL', 'NONE']).optional(),
-    primaryAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional(),
-    counterAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX']).optional(),
-    itemSpacing: z.number().optional(),
-    padding: z.union([z.number(), z.tuple([z.number(), z.number(), z.number(), z.number()])]).optional(),
-
-    // Sizing (auto-layout children)
-    layoutSizingHorizontal: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
-    layoutSizingVertical: z.enum(['FIXED', 'HUG', 'FILL']).optional(),
-
-    // Text
-    characters: z.string().optional(),
-    fontSize: z.number().optional(),
-    fontFamily: z.string().optional(),
-    fontWeight: z.union([z.number(), z.string()]).optional(),
-    fontStyle: z.string().optional(),
-    textAlignHorizontal: z.enum(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED']).optional(),
-    textAlignVertical: z.enum(['TOP', 'CENTER', 'BOTTOM']).optional(),
-    textAutoResize: z.enum(['WIDTH_AND_HEIGHT', 'HEIGHT', 'NONE', 'TRUNCATE']).optional(),
-    lineHeight: z.union([z.number(), LineHeightSchema]).optional(),
-    letterSpacing: z.number().optional(),
-    textDecoration: z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']).optional(),
-    textCase: z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE']).optional(),
-
-    // Component instance
-    componentKey: z.string().optional().describe('Component key for published library components'),
-    componentId: z.string().optional().describe('Node ID for local components (e.g. "121:317")'),
-    overrides: z.record(z.union([z.string(), z.boolean()])).optional().describe('Property overrides for COMPONENT_INSTANCE — keys are property names, values are strings or booleans'),
-
-    // Component / Component Set
-    componentDescription: z.string().optional().describe('Description for COMPONENT or COMPONENT_SET nodes'),
-
-    // Children
-    children: z.array(z.lazy(() => SceneNodeSchema)).optional(),
-
-    // Visibility
-    visible: z.boolean().optional(),
-    locked: z.boolean().optional(),
-  })
-);
+import { SceneNodeSchema } from '../schemas.js';
 
 // ─── Tool Description ──────────────────────────────────────────
 
@@ -223,15 +118,20 @@ export function registerBuildSceneTool(server: McpServer): void {
     TOOL_DESCRIPTION,
     {
       scene: SceneNodeSchema.describe('The root node of the scene tree to build'),
-      parentNodeId: z.string().optional().describe('Figma node ID to build into. If omitted, builds on the current page.'),
+      parentNodeId: z
+        .string()
+        .optional()
+        .describe('Figma node ID to build into. If omitted, builds on the current page.'),
     },
     async (params) => {
       if (!isPluginConnected()) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
+            },
+          ],
           isError: true,
         };
       }
@@ -262,15 +162,17 @@ export function registerBuildSceneTool(server: McpServer): void {
             text += `Nodes created: ${data.nodeCount}`;
 
             if (data.fontSubstitutions.length > 0) {
-              text += `\n\nFont substitutions:\n${data.fontSubstitutions.map(s => `  - ${s}`).join('\n')}`;
+              text += `\n\nFont substitutions:\n${data.fontSubstitutions.map((s) => `  - ${s}`).join('\n')}`;
             }
 
             if (data.errors.length > 0) {
-              text += `\n\nWarnings:\n${data.errors.map(e => `  - ${e}`).join('\n')}`;
+              text += `\n\nWarnings:\n${data.errors.map((e) => `  - ${e}`).join('\n')}`;
             }
 
             if (Object.keys(data.nodeIdMap).length > 0) {
-              text += `\n\nNode ID map:\n${Object.entries(data.nodeIdMap).map(([k, v]) => `  ${k} → ${v}`).join('\n')}`;
+              text += `\n\nNode ID map:\n${Object.entries(data.nodeIdMap)
+                .map(([k, v]) => `  ${k} → ${v}`)
+                .join('\n')}`;
             }
 
             return {
@@ -278,31 +180,37 @@ export function registerBuildSceneTool(server: McpServer): void {
             };
           } else {
             return {
-              content: [{
-                type: 'text' as const,
-                text: `Build failed: ${response.error ?? 'Unknown error'}`,
-              }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `Build failed: ${response.error ?? 'Unknown error'}`,
+                },
+              ],
               isError: true,
             };
           }
         }
 
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Unexpected response type: ${response.type}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Unexpected response type: ${response.type}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Build scene failed: ${err instanceof Error ? err.message : String(err)}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Build scene failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 }

@@ -71,8 +71,8 @@ async function createNode(spec: SceneSpec): Promise<SceneNode> {
 export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[]): void {
   try {
     const figmaFills: Paint[] = fills
-      .filter(f => f.visible !== false)
-      .map(fill => {
+      .filter((f) => f.visible !== false)
+      .map((fill) => {
         if (fill.type === 'SOLID') {
           const rgba = fill.color ? hexToRgba(fill.color) : { r: 0, g: 0, b: 0, a: 1 };
           return {
@@ -81,16 +81,25 @@ export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[])
             opacity: fill.opacity ?? rgba.a,
           };
         }
-        if (fill.type === 'GRADIENT_LINEAR' || fill.type === 'GRADIENT_RADIAL' ||
-            fill.type === 'GRADIENT_ANGULAR' || fill.type === 'GRADIENT_DIAMOND') {
-          const stops: ColorStop[] = (fill.gradientStops ?? []).map(stop => {
+        if (
+          fill.type === 'GRADIENT_LINEAR' ||
+          fill.type === 'GRADIENT_RADIAL' ||
+          fill.type === 'GRADIENT_ANGULAR' ||
+          fill.type === 'GRADIENT_DIAMOND'
+        ) {
+          const stops: ColorStop[] = (fill.gradientStops ?? []).map((stop) => {
             const c = hexToRgba(stop.color);
             return { position: stop.position, color: { r: c.r, g: c.g, b: c.b, a: c.a } };
           });
           return {
             type: fill.type,
             gradientStops: stops,
-            gradientTransform: fill.gradientTransform ?? [[1, 0, 0], [0, 1, 0]] as Transform,
+            gradientTransform:
+              fill.gradientTransform ??
+              ([
+                [1, 0, 0],
+                [0, 1, 0],
+              ] as Transform),
             opacity: fill.opacity ?? 1,
           } as GradientPaint;
         }
@@ -109,7 +118,7 @@ export function applyFills(node: GeometryMixin, fills: Fill[], errors: string[])
 
 export function applyStrokes(node: GeometryMixin, strokes: Stroke[], errors: string[]): void {
   try {
-    const figmaStrokes: Paint[] = strokes.map(stroke => {
+    const figmaStrokes: Paint[] = strokes.map((stroke) => {
       const rgba = hexToRgba(stroke.color);
       return {
         type: 'SOLID' as const,
@@ -137,7 +146,7 @@ export function applyStrokes(node: GeometryMixin, strokes: Stroke[], errors: str
 
 export function applyEffects(node: BlendMixin, effects: Effect[], errors: string[]): void {
   try {
-    const figmaEffects: Effect[] = effects.map(effect => {
+    const figmaEffects: Effect[] = effects.map((effect) => {
       if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
         // Shadow alpha IS part of the color object (different from fills!)
         const rgba = effect.color ? hexToRgba(effect.color) : { r: 0, g: 0, b: 0, a: 0.5 };
@@ -272,7 +281,9 @@ export async function applyTextProperties(
       node.textCase = spec.textCase;
     }
   } catch (err) {
-    errors.push(`applyTextProperties "${spec.name ?? '(unnamed)'}": ${err instanceof Error ? err.message : String(err)}`);
+    errors.push(
+      `applyTextProperties "${spec.name ?? '(unnamed)'}": ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

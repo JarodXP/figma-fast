@@ -147,7 +147,12 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
       handleManageComponentProperties(
         msg.componentId as string,
         msg.action as 'add' | 'update' | 'delete',
-        msg.properties as Array<{ name: string; type: string; defaultValue: string | boolean; variantOptions?: string[] }>,
+        msg.properties as Array<{
+          name: string;
+          type: string;
+          defaultValue: string | boolean;
+          variantOptions?: string[];
+        }>,
       )
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));

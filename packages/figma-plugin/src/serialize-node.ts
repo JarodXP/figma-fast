@@ -59,11 +59,15 @@ function serializePaint(paint: Paint): unknown {
       visible: paint.visible ?? true,
     };
   }
-  if (paint.type === 'GRADIENT_LINEAR' || paint.type === 'GRADIENT_RADIAL' ||
-      paint.type === 'GRADIENT_ANGULAR' || paint.type === 'GRADIENT_DIAMOND') {
+  if (
+    paint.type === 'GRADIENT_LINEAR' ||
+    paint.type === 'GRADIENT_RADIAL' ||
+    paint.type === 'GRADIENT_ANGULAR' ||
+    paint.type === 'GRADIENT_DIAMOND'
+  ) {
     return {
       type: paint.type,
-      gradientStops: (paint as GradientPaint).gradientStops.map(stop => ({
+      gradientStops: (paint as GradientPaint).gradientStops.map((stop) => ({
         position: stop.position,
         color: rgbaToHex({ r: stop.color.r, g: stop.color.g, b: stop.color.b, a: stop.color.a }),
       })),
@@ -229,11 +233,14 @@ export function serializeNode(node: BaseNode, depth: number): SerializedNode {
     if (compSet.description) result.componentDescription = compSet.description;
     if (compSet.componentPropertyDefinitions) {
       result.componentPropertyDefinitions = Object.fromEntries(
-        Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [k, {
-          type: v.type,
-          defaultValue: v.defaultValue,
-          variantOptions: v.variantOptions,
-        }])
+        Object.entries(compSet.componentPropertyDefinitions).map(([k, v]) => [
+          k,
+          {
+            type: v.type,
+            defaultValue: v.defaultValue,
+            variantOptions: v.variantOptions,
+          },
+        ]),
       );
     }
   }
@@ -250,10 +257,10 @@ export function serializeNode(node: BaseNode, depth: number): SerializedNode {
   if ('children' in node) {
     const parent = node as BaseNode & ChildrenMixin;
     if (depth > 0) {
-      result.children = parent.children.map(child => serializeNode(child, depth - 1));
+      result.children = parent.children.map((child) => serializeNode(child, depth - 1));
     } else {
       // Summary only at depth 0
-      result.children = parent.children.map(child => ({
+      result.children = parent.children.map((child) => ({
         id: child.id,
         name: child.name,
         type: child.type,

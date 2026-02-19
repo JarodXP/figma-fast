@@ -18,10 +18,7 @@ export interface BuildSceneResult {
   durationMs: number;
 }
 
-export async function buildScene(
-  spec: SceneSpec,
-  parentId?: string,
-): Promise<BuildSceneResult> {
+export async function buildScene(spec: SceneSpec, parentId?: string): Promise<BuildSceneResult> {
   const startTime = Date.now();
   const idMap: IdMap = {};
   const errors: string[] = [];
@@ -62,8 +59,8 @@ export async function buildScene(
 
   // 3. PRELOAD ALL FONTS in parallel
   const failedFontRefs = await preloadFonts(fontRefs);
-  const failedFonts = new Set(failedFontRefs.map(f => `${f.family}::${f.style}`));
-  const fontSubstitutions = failedFontRefs.map(f => `${f.family} ${f.style} → Inter Regular`);
+  const failedFonts = new Set(failedFontRefs.map((f) => `${f.family}::${f.style}`));
+  const fontSubstitutions = failedFontRefs.map((f) => `${f.family} ${f.style} → Inter Regular`);
 
   // 4. UNDO BATCHING — start batch
   try {

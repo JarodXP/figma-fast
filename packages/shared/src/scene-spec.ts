@@ -32,8 +32,8 @@ export interface GradientStop {
 
 export interface Fill {
   type: FillType;
-  color?: string;       // hex string (#RGB, #RRGGBB, or #RRGGBBAA)
-  opacity?: number;     // 0–1
+  color?: string; // hex string (#RGB, #RRGGBB, or #RRGGBBAA)
+  opacity?: number; // 0–1
   visible?: boolean;
   gradientStops?: GradientStop[];
   gradientTransform?: [[number, number, number], [number, number, number]];
@@ -44,28 +44,24 @@ export interface Fill {
 export type StrokeAlign = 'INSIDE' | 'OUTSIDE' | 'CENTER';
 
 export interface Stroke {
-  type?: FillType;      // defaults to SOLID
-  color: string;        // hex string
+  type?: FillType; // defaults to SOLID
+  color: string; // hex string
   weight: number;
   align?: StrokeAlign;
   opacity?: number;
   dashPattern?: number[];
 }
 
-export type EffectType =
-  | 'DROP_SHADOW'
-  | 'INNER_SHADOW'
-  | 'LAYER_BLUR'
-  | 'BACKGROUND_BLUR';
+export type EffectType = 'DROP_SHADOW' | 'INNER_SHADOW' | 'LAYER_BLUR' | 'BACKGROUND_BLUR';
 
 export interface Effect {
   type: EffectType;
-  color?: string;       // hex string (for shadows)
+  color?: string; // hex string (for shadows)
   offset?: { x: number; y: number };
   radius: number;
-  spread?: number;      // for shadows
+  spread?: number; // for shadows
   visible?: boolean;
-  opacity?: number;     // for shadows (via color alpha or explicit)
+  opacity?: number; // for shadows (via color alpha or explicit)
 }
 
 export type LayoutMode = 'HORIZONTAL' | 'VERTICAL' | 'NONE';

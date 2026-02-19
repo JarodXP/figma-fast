@@ -22,10 +22,12 @@ function base64Encode(bytes: Uint8Array): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   let result = '';
   for (let i = 0; i < bytes.length; i += 3) {
-    const b1 = bytes[i], b2 = bytes[i + 1] ?? 0, b3 = bytes[i + 2] ?? 0;
+    const b1 = bytes[i],
+      b2 = bytes[i + 1] ?? 0,
+      b3 = bytes[i + 2] ?? 0;
     result += chars[b1 >> 2] + chars[((b1 & 3) << 4) | (b2 >> 4)];
-    result += (i + 1 < bytes.length) ? chars[((b2 & 15) << 2) | (b3 >> 6)] : '=';
-    result += (i + 2 < bytes.length) ? chars[b3 & 63] : '=';
+    result += i + 1 < bytes.length ? chars[((b2 & 15) << 2) | (b3 >> 6)] : '=';
+    result += i + 2 < bytes.length ? chars[b3 & 63] : '=';
   }
   return result;
 }
@@ -33,14 +35,14 @@ function base64Encode(bytes: Uint8Array): string {
 // ─── Read Handlers ─────────────────────────────────────────────
 
 export async function handleGetDocumentInfo(): Promise<unknown> {
-  const pages = figma.root.children.map(page => ({
+  const pages = figma.root.children.map((page) => ({
     id: page.id,
     name: page.name,
     childCount: page.children.length,
   }));
 
   const currentPage = figma.currentPage;
-  const topLevelFrames = currentPage.children.map(child => ({
+  const topLevelFrames = currentPage.children.map((child) => ({
     id: child.id,
     name: child.name,
     type: child.type,
@@ -67,7 +69,7 @@ export async function handleGetSelection(): Promise<unknown> {
   const selection = figma.currentPage.selection;
   return {
     count: selection.length,
-    nodes: selection.map(node => serializeNode(node, 0)),
+    nodes: selection.map((node) => serializeNode(node, 0)),
   };
 }
 
@@ -79,8 +81,8 @@ export async function handleGetStyles(): Promise<unknown> {
   ]);
 
   return {
-    paintStyles: paintStyles.map(style => {
-      const paints = style.paints.map(paint => {
+    paintStyles: paintStyles.map((style) => {
+      const paints = style.paints.map((paint) => {
         if (paint.type === 'SOLID') {
           return {
             type: 'SOLID',
@@ -97,7 +99,7 @@ export async function handleGetStyles(): Promise<unknown> {
         paints,
       };
     }),
-    textStyles: textStyles.map(style => ({
+    textStyles: textStyles.map((style) => ({
       id: style.id,
       name: style.name,
       key: style.key,
@@ -109,11 +111,11 @@ export async function handleGetStyles(): Promise<unknown> {
       textDecoration: style.textDecoration,
       textCase: style.textCase,
     })),
-    effectStyles: effectStyles.map(style => ({
+    effectStyles: effectStyles.map((style) => ({
       id: style.id,
       name: style.name,
       key: style.key,
-      effects: style.effects.map(effect => {
+      effects: style.effects.map((effect) => {
         if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
           const shadow = effect as DropShadowEffect | InnerShadowEffect;
           return {
@@ -134,7 +136,7 @@ export async function handleGetLocalComponents(): Promise<unknown> {
   const components = figma.root.findAllWithCriteria({ types: ['COMPONENT'] });
   return {
     count: components.length,
-    components: components.map(comp => {
+    components: components.map((comp) => {
       const component = comp as ComponentNode;
       return {
         id: component.id,
@@ -146,11 +148,7 @@ export async function handleGetLocalComponents(): Promise<unknown> {
   };
 }
 
-export async function handleExportNode(
-  nodeId: string,
-  format: string,
-  scale: number,
-): Promise<unknown> {
+export async function handleExportNode(nodeId: string, format: string, scale: number): Promise<unknown> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
     throw new Error(`Node not found: ${nodeId}`);
@@ -180,10 +178,7 @@ export async function handleExportNode(
 
 // ─── Edit Handlers ─────────────────────────────────────────────
 
-export async function handleModifyNode(
-  nodeId: string,
-  properties: Partial<SceneSpec>,
-): Promise<unknown> {
+export async function handleModifyNode(nodeId: string, properties: Partial<SceneSpec>): Promise<unknown> {
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
     throw new Error(`Node not found: ${nodeId}`);
@@ -203,8 +198,12 @@ export async function handleModifyNode(
     if (properties.fontFamily || properties.fontWeight) {
       const family = properties.fontFamily ?? (fontName !== figma.mixed ? fontName.family : 'Inter');
       const style = properties.fontWeight
-        ? (typeof properties.fontWeight === 'number' ? getFontStyleFromWeight(properties.fontWeight) : String(properties.fontWeight))
-        : (fontName !== figma.mixed ? fontName.style : 'Regular');
+        ? typeof properties.fontWeight === 'number'
+          ? getFontStyleFromWeight(properties.fontWeight)
+          : String(properties.fontWeight)
+        : fontName !== figma.mixed
+          ? fontName.style
+          : 'Regular';
       try {
         await figma.loadFontAsync({ family, style });
       } catch {
@@ -566,7 +565,9 @@ export async function handleManageComponentProperties(
         }
       }
     } catch (err) {
-      throw new Error(`Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(
+        `Failed to ${action} property "${prop.name}": ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -582,15 +583,25 @@ export async function handleManageComponentProperties(
 
 function getFontStyleFromWeight(weight: number): string {
   switch (weight) {
-    case 100: return 'Thin';
-    case 200: return 'Extra Light';
-    case 300: return 'Light';
-    case 400: return 'Regular';
-    case 500: return 'Medium';
-    case 600: return 'Semi Bold';
-    case 700: return 'Bold';
-    case 800: return 'Extra Bold';
-    case 900: return 'Black';
-    default: return 'Regular';
+    case 100:
+      return 'Thin';
+    case 200:
+      return 'Extra Light';
+    case 300:
+      return 'Light';
+    case 400:
+      return 'Regular';
+    case 500:
+      return 'Medium';
+    case 600:
+      return 'Semi Bold';
+    case 700:
+      return 'Bold';
+    case 800:
+      return 'Extra Bold';
+    case 900:
+      return 'Black';
+    default:
+      return 'Regular';
   }
 }

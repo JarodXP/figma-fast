@@ -13,10 +13,12 @@ export function registerPingTool(server: McpServer): void {
     async () => {
       if (!isPluginConnected()) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Figma plugin is not connected. Open the FigmaFast plugin in Figma.',
+            },
+          ],
           isError: true,
         };
       }
@@ -29,29 +31,35 @@ export function registerPingTool(server: McpServer): void {
 
         if (response.type === 'pong') {
           return {
-            content: [{
-              type: 'text' as const,
-              text: `pong (${rtt}ms round-trip)`,
-            }],
+            content: [
+              {
+                type: 'text' as const,
+                text: `pong (${rtt}ms round-trip)`,
+              },
+            ],
           };
         }
 
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Unexpected response type: ${response.type}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Unexpected response type: ${response.type}`,
+            },
+          ],
           isError: true,
         };
       } catch (err) {
         return {
-          content: [{
-            type: 'text' as const,
-            text: `Ping failed: ${err instanceof Error ? err.message : String(err)}`,
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Ping failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
           isError: true,
         };
       }
-    }
+    },
   );
 }

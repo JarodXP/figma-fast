@@ -32,9 +32,12 @@ startWsServer(WS_PORT);
 
 // Connect via stdio transport
 const transport = new StdioServerTransport();
-server.connect(transport).then(() => {
-  console.error(`[FigmaFast] MCP server running (stdio), WebSocket on port ${WS_PORT}`);
-}).catch((err) => {
-  console.error('[FigmaFast] Failed to start MCP server:', err);
-  process.exit(1);
-});
+server
+  .connect(transport)
+  .then(() => {
+    console.error(`[FigmaFast] MCP server running (stdio), WebSocket on port ${WS_PORT}`);
+  })
+  .catch((err) => {
+    console.error('[FigmaFast] Failed to start MCP server:', err);
+    process.exit(1);
+  });
