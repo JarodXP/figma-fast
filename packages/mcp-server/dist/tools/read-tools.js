@@ -258,6 +258,58 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`, {
             };
         }
     });
+    // ─── get_image_fill ──────────────────────────────────────────
+    server.tool('get_image_fill', "Extract the raw image data from an IMAGE-type fill on a Figma node (e.g. logos, photos embedded as image fills). Returns the image as a viewable image. Use fillIndex to select among multiple image fills (0 = first, default). To find IMAGE fills and their hashes, use get_node_info first.", {
+        nodeId: zod_1.z.string().describe('The Figma node ID'),
+        fillIndex: zod_1.z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe('Which image fill to extract among IMAGE-type fills on the node (0 = first, default 0)'),
+    }, async (params) => {
+        if (!(0, server_js_1.isPluginConnected)())
+            return NOT_CONNECTED;
+        try {
+            const response = await (0, server_js_1.sendToPlugin)({
+                type: 'get_image_fill',
+                nodeId: params.nodeId,
+                fillIndex: params.fillIndex,
+            }, TIMEOUT);
+            if (response.type === 'result' && response.success) {
+                const data = response.data;
+                return {
+                    content: [
+                        {
+                            type: 'image',
+                            data: data.base64,
+                            mimeType: data.mimeType,
+                        },
+                    ],
+                };
+            }
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_image_fill failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+        catch (err) {
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `get_image_fill failed: ${err instanceof Error ? err.message : String(err)}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+    });
     // ─── export_node_as_image ────────────────────────────────────
     server.tool('export_node_as_image', 'Export a Figma node as an image (PNG, SVG, JPG, or PDF). For PNG/JPG, returns the image as a viewable image. For SVG, returns the SVG source as text. Use this to visually inspect designs.', {
         nodeId: zod_1.z.string().describe('The Figma node ID to export'),

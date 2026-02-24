@@ -135,6 +135,11 @@ export type ServerToPluginMessage = {
     imageData: string;
     scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
 } | {
+    type: 'get_image_fill';
+    id: string;
+    nodeId: string;
+    fillIndex?: number;
+} | {
     type: 'boolean_operation';
     id: string;
     operation: 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE';

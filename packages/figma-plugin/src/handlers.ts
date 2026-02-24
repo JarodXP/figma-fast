@@ -740,6 +740,46 @@ export async function handleSetImageFill(nodeId: string, imageData: string, scal
   };
 }
 
+export async function handleGetImageFill(nodeId: string, fillIndex?: number): Promise<unknown> {
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) throw new Error(`Node not found: ${nodeId}`);
+  if (!('fills' in node)) throw new Error(`Node ${nodeId} does not support fills`);
+
+  const fills = (node as GeometryMixin).fills;
+  if (fills === figma.mixed || !Array.isArray(fills)) throw new Error(`Node ${nodeId} has mixed fills`);
+
+  const imageFills = fills.filter((f) => f.type === 'IMAGE') as ImagePaint[];
+  if (imageFills.length === 0) throw new Error(`Node ${nodeId} has no image fills`);
+
+  const idx = fillIndex ?? 0;
+  if (idx >= imageFills.length) throw new Error(`Fill index ${idx} out of range (${imageFills.length} image fills)`);
+
+  const fill = imageFills[idx];
+  const image = figma.getImageByHash(fill.imageHash);
+  if (!image) throw new Error(`Image not found for hash: ${fill.imageHash}`);
+
+  const bytes = await image.getBytesAsync();
+  const mimeType = detectImageMimeType(bytes);
+  const base64 = base64Encode(bytes);
+
+  return {
+    base64,
+    mimeType,
+    imageHash: fill.imageHash,
+    scaleMode: fill.scaleMode,
+    byteLength: bytes.length,
+    totalImageFills: imageFills.length,
+  };
+}
+
+function detectImageMimeType(bytes: Uint8Array): string {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif';
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'image/webp';
+  return 'image/png';
+}
+
 // ─── Style Creation Handlers ───────────────────────────────────
 
 export async function handleCreatePaintStyle(name: string, fills: Fill[]): Promise<unknown> {

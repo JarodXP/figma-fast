@@ -26,6 +26,7 @@ import {
   handleCreateTextStyle,
   handleCreateEffectStyle,
   handleSetImageFill,
+  handleGetImageFill,
   handleBooleanOperation,
   handleBatchModify,
   handleBatchGetNodeInfo,
@@ -224,6 +225,12 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
 
     case 'set_image_fill':
       handleSetImageFill(msg.nodeId as string, msg.imageData as string, msg.scaleMode as string | undefined)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'get_image_fill':
+      handleGetImageFill(msg.nodeId as string, msg.fillIndex as number | undefined)
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

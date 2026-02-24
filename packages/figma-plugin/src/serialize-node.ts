@@ -78,6 +78,7 @@ function serializePaint(paint: Paint): unknown {
   if (paint.type === 'IMAGE') {
     return {
       type: 'IMAGE',
+      imageHash: (paint as ImagePaint).imageHash,
       scaleMode: (paint as ImagePaint).scaleMode,
       opacity: paint.opacity ?? 1,
       visible: paint.visible ?? true,

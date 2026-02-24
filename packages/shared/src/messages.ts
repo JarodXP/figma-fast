@@ -78,6 +78,7 @@ export type ServerToPluginMessage =
       imageData: string;
       scaleMode?: 'FILL' | 'FIT' | 'CROP' | 'TILE';
     }
+  | { type: 'get_image_fill'; id: string; nodeId: string; fillIndex?: number }
   // Phase 9: Boolean Operations
   | {
       type: 'boolean_operation';

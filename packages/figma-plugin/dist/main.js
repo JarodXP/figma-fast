@@ -832,6 +832,7 @@
     if (paint.type === "IMAGE") {
       return {
         type: "IMAGE",
+        imageHash: paint.imageHash,
         scaleMode: paint.scaleMode,
         opacity: (_e = paint.opacity) != null ? _e : 1,
         visible: (_f = paint.visible) != null ? _f : true
@@ -1594,6 +1595,40 @@
       };
     });
   }
+  function handleGetImageFill(nodeId, fillIndex) {
+    return __async(this, null, function* () {
+      const node = yield figma.getNodeByIdAsync(nodeId);
+      if (!node) throw new Error(`Node not found: ${nodeId}`);
+      if (!("fills" in node)) throw new Error(`Node ${nodeId} does not support fills`);
+      const fills = node.fills;
+      if (fills === figma.mixed || !Array.isArray(fills)) throw new Error(`Node ${nodeId} has mixed fills`);
+      const imageFills = fills.filter((f) => f.type === "IMAGE");
+      if (imageFills.length === 0) throw new Error(`Node ${nodeId} has no image fills`);
+      const idx = fillIndex != null ? fillIndex : 0;
+      if (idx >= imageFills.length) throw new Error(`Fill index ${idx} out of range (${imageFills.length} image fills)`);
+      const fill = imageFills[idx];
+      const image = figma.getImageByHash(fill.imageHash);
+      if (!image) throw new Error(`Image not found for hash: ${fill.imageHash}`);
+      const bytes = yield image.getBytesAsync();
+      const mimeType = detectImageMimeType(bytes);
+      const base64 = base64Encode(bytes);
+      return {
+        base64,
+        mimeType,
+        imageHash: fill.imageHash,
+        scaleMode: fill.scaleMode,
+        byteLength: bytes.length,
+        totalImageFills: imageFills.length
+      };
+    });
+  }
+  function detectImageMimeType(bytes) {
+    if (bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71) return "image/png";
+    if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
+    if (bytes[0] === 71 && bytes[1] === 73 && bytes[2] === 70) return "image/gif";
+    if (bytes[0] === 82 && bytes[1] === 73 && bytes[2] === 70 && bytes[3] === 70) return "image/webp";
+    return "image/png";
+  }
   function handleCreatePaintStyle(name, fills) {
     return __async(this, null, function* () {
       var _a, _b, _c, _d;
@@ -1914,6 +1949,9 @@
       // ─── Image Fill Tools ─────────────────────────────────────
       case "set_image_fill":
         handleSetImageFill(msg.nodeId, msg.imageData, msg.scaleMode).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "get_image_fill":
+        handleGetImageFill(msg.nodeId, msg.fillIndex).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       // ─── Boolean Operation Tools ──────────────────────────────
       case "boolean_operation":

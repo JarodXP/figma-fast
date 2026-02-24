@@ -12,7 +12,7 @@ Traditional Figma MCP tools create nodes one at a time. A simple card with a tit
 
 FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates everything in one call — frames, text, shapes, components, component sets with variants, images from URL, and style bindings. A full dashboard in a single request. Combined with read tools for inspecting the canvas, edit tools for surgical changes, style/page/component management tools, and boolean operations for custom shapes, it gives AI assistants a complete Figma design system workflow.
 
-### Tool Inventory (26 tools)
+### Tool Inventory (27 tools)
 
 #### Scene Building
 
@@ -32,6 +32,7 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 | `get_local_components` | List local components with keys |
 | `get_library_components` | Search team library components via REST API |
 | `export_node_as_image` | Export a node as PNG, SVG, JPG, or PDF |
+| `get_image_fill` | Extract the raw image data from an IMAGE fill (logos, photos embedded in a design) |
 
 #### Editing & Manipulation
 
@@ -223,6 +224,20 @@ Add a hero image from Unsplash to the header frame, and set it to fill mode.
 ```
 
 Claude calls `set_image_fill` with the URL. The MCP server downloads the image and sends it to the plugin as base64.
+
+### Download embedded images
+
+```
+Extract the logo from the header node so I can use it in code.
+```
+
+Claude calls `get_node_info` to find IMAGE fills (which now include `imageHash`), then `get_image_fill` to retrieve the raw source bytes. This is distinct from `export_node_as_image` — it gives you the original uploaded image, not a re-render of the node.
+
+```
+Show me what images are embedded in node 123:456.
+```
+
+Claude calls `get_node_info` → sees fills with `type: "IMAGE"` and `imageHash`, then calls `get_image_fill` with `fillIndex` to view each one.
 
 ### Export for review
 

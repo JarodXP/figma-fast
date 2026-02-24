@@ -316,6 +316,76 @@ Example: { "fileKey": "abc123XYZ", "query": "pencil" }`,
     },
   );
 
+  // ─── get_image_fill ──────────────────────────────────────────
+
+  server.tool(
+    'get_image_fill',
+    "Extract the raw image data from an IMAGE-type fill on a Figma node (e.g. logos, photos embedded as image fills). Returns the image as a viewable image. Use fillIndex to select among multiple image fills (0 = first, default). To find IMAGE fills and their hashes, use get_node_info first.",
+    {
+      nodeId: z.string().describe('The Figma node ID'),
+      fillIndex: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Which image fill to extract among IMAGE-type fills on the node (0 = first, default 0)'),
+    },
+    async (params) => {
+      if (!isPluginConnected()) return NOT_CONNECTED;
+
+      try {
+        const response = await sendToPlugin(
+          {
+            type: 'get_image_fill',
+            nodeId: params.nodeId,
+            fillIndex: params.fillIndex,
+          },
+          TIMEOUT,
+        );
+
+        if (response.type === 'result' && response.success) {
+          const data = response.data as {
+            base64: string;
+            mimeType: string;
+            imageHash: string;
+            scaleMode: string;
+            byteLength: number;
+            totalImageFills: number;
+          };
+          return {
+            content: [
+              {
+                type: 'image' as const,
+                data: data.base64,
+                mimeType: data.mimeType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_image_fill failed: ${response.type === 'result' ? response.error : 'Unexpected response'}`,
+            },
+          ],
+          isError: true,
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_image_fill failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // ─── export_node_as_image ────────────────────────────────────
 
   server.tool(
