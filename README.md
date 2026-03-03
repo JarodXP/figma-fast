@@ -153,10 +153,10 @@ Ask Claude: *"Ping the Figma plugin"* -- you should get a `pong` response with r
 
 When both Claude Code and Claude Desktop are running:
 
-1. The first client to start becomes the **active** client and controls Figma
-2. The second client connects but is **inactive** — its tool calls return a clear error rather than silently failing
-3. Open the FigmaFast plugin panel in Figma — you'll see both clients listed
-4. Click a client name to switch which one is active — no restarts needed
+1. Both clients connect and appear in the FigmaFast plugin panel
+2. Whichever client makes a tool call **automatically becomes the active client** — no manual switching needed
+3. You can also click a client name in the plugin panel to switch explicitly
+4. Responses always route back to the originating client via correlation ID, so concurrent requests from different clients are safe
 
 ## Usage Examples
 
@@ -317,6 +317,7 @@ figma-fast/
 2. **MCP Server** validates params, routes the command through the WS relay
    - The first MCP server to start launches the relay in-process on port 3056
    - Subsequent MCP servers detect the relay and connect as clients
+   - When a client registers, the relay immediately tells it whether the plugin is already connected (so connection order doesn't matter)
    - For image fills, the server downloads images and sends base64-encoded data
 3. **WS Relay** forwards the command to the Figma plugin (only the active client can send)
 4. **Plugin UI** (iframe) receives the WS message, forwards to the main thread via `postMessage`
@@ -603,9 +604,6 @@ Figma does NOT hot-reload plugin code automatically.
 **Plugin shows "Disconnected" (red dot)**
 - All MCP servers may have stopped. Restart your AI client to relaunch them.
 - If using a custom port, ensure the plugin UI and manifest match.
-
-**Tool calls return "not active client" error**
-- Another AI client is currently active. Open the FigmaFast plugin panel and click your client to make it active.
 
 **Client shows as "MCP Client \<uuid\>" in the plugin**
 - Set `MCP_CLIENT_NAME` in your AI client's MCP config `env` field to give it a human-readable name.

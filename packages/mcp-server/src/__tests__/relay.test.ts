@@ -253,15 +253,15 @@ describe('TEST-R-007: Plugin responses routed back to client', () => {
   });
 });
 
-// TEST-R-008: Inactive client messages rejected immediately
-describe('TEST-R-008: Inactive client messages rejected', () => {
+// TEST-R-008: Inactive client auto-activates on first request
+describe('TEST-R-008: Inactive client auto-activates on request', () => {
   let relay: WsRelay;
 
   afterEach(async () => {
     await relay?.close();
   });
 
-  it('returns error with "Another client is currently active" for inactive client', async () => {
+  it('auto-activates the requesting client and forwards the message to the plugin', async () => {
     const port = 39200 + Math.floor(Math.random() * 100);
     relay = new WsRelay(port);
     await relay.start();
@@ -277,25 +277,20 @@ describe('TEST-R-008: Inactive client messages rejected', () => {
     client1.send(JSON.stringify({ type: 'register', clientId: 'uuid-1', clientName: 'Claude Desktop' }));
     await wait(50);
 
-    // Register second (inactive) client
+    // Register second (initially inactive) client
     const client2 = new WebSocket(`ws://localhost:${port}`);
     await new Promise<void>((resolve) => client2.on('open', resolve));
     client2.send(JSON.stringify({ type: 'register', clientId: 'uuid-2', clientName: 'Claude Code' }));
     await wait(50);
 
-    // Drain the 'registered' messages
-    const responsePromise = nextMessage(client2);
-    // Give a small gap so the 'registered' message has been consumed already
-    await wait(10);
-
+    // Client2 sends a request — should auto-activate and reach the plugin
+    const pluginMsgPromise = nextMessageOfType(plugin, 'ping');
     client2.send(JSON.stringify({ type: 'ping', id: 'xyz-789' }));
-    const response = await responsePromise as { type: string; id: string; success: boolean; error?: string };
+    const pluginMsg = await pluginMsgPromise as { type: string; id: string };
 
-    expect(response.type).toBe('result');
-    expect(response.id).toBe('xyz-789');
-    expect(response.success).toBe(false);
-    expect(response.error).toMatch(/Another client is currently active/);
-    expect(response.error).toMatch(/Claude Desktop/);
+    expect(pluginMsg.type).toBe('ping');
+    expect(pluginMsg.id).toBe('xyz-789');
+    expect(relay.currentActiveClientId).toBe('uuid-2');
 
     client1.close();
     client2.close();
@@ -828,12 +823,13 @@ describe('TEST-R-024: Commands route to newly active client after switch', () =>
     const received = await pluginMsgPromise;
     expect(received).toMatchObject({ type: 'ping', id: 'ping-from-B' });
 
-    // Client1 (now inactive) should receive rejection
-    const rejectionPromise = nextMessage(client1);
+    // Client1 sends — auto-activates itself and its request also reaches the plugin
+    const pluginMsgPromise2 = nextMessageOfType(plugin, 'ping');
     client1.send(JSON.stringify({ type: 'ping', id: 'ping-from-A' }));
-    const rejection = await rejectionPromise as { type: string; success: boolean };
-    expect(rejection.type).toBe('result');
-    expect(rejection.success).toBe(false);
+    const received2 = await pluginMsgPromise2 as { type: string; id: string };
+    expect(received2.type).toBe('ping');
+    expect(received2.id).toBe('ping-from-A');
+    expect(relay.currentActiveClientId).toBe('id-A');
 
     client1.close();
     client2.close();

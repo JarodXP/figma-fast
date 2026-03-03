@@ -181,6 +181,10 @@ class WsRelay {
         this.clients.set(clientId, { socket, clientName, connectedAt: Date.now() });
         // Send registered confirmation
         socket.send(JSON.stringify({ type: 'registered', clientId, isActive }));
+        // If plugin is already connected, tell the new client immediately
+        if (this._pluginSocket && this._pluginSocket.readyState === ws_1.WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'plugin_connected' }));
+        }
         // Broadcast updated client list to plugin
         this.broadcastClientList();
         // Set up message handler for this client
@@ -210,23 +214,11 @@ class WsRelay {
         this.broadcastClientList();
     }
     handleClientMessage(clientId, msg) {
-        const isActive = this._activeClientId === clientId;
-        if (!isActive) {
-            // Reject inactive client
-            const activeEntry = this._activeClientId ? this.clients.get(this._activeClientId) : null;
-            const activeName = activeEntry?.clientName ?? 'unknown';
-            const clientEntry = this.clients.get(clientId);
-            if (clientEntry && clientEntry.socket.readyState === ws_1.WebSocket.OPEN) {
-                clientEntry.socket.send(JSON.stringify({
-                    type: 'result',
-                    id: msg.id ?? '',
-                    success: false,
-                    error: `Another client is currently active: ${activeName}`,
-                }));
-            }
-            return;
+        // Auto-activate the requesting client if it isn't already active
+        if (this._activeClientId !== clientId) {
+            this.handleSetActiveClient(clientId);
         }
-        // Active client — check plugin is connected
+        // Check plugin is connected
         if (!this._pluginSocket || this._pluginSocket.readyState !== ws_1.WebSocket.OPEN) {
             const clientEntry = this.clients.get(clientId);
             if (clientEntry && clientEntry.socket.readyState === ws_1.WebSocket.OPEN) {

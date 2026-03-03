@@ -158,8 +158,8 @@ describe('TEST-S-003: sendToPlugin end-to-end through relay', () => {
   }, 5000);
 });
 
-// TEST-S-004: sendToPlugin rejects when client is inactive
-describe('TEST-S-004: sendToPlugin rejects for inactive client', () => {
+// TEST-S-004: sendToPlugin auto-activates the client on request
+describe('TEST-S-004: sendToPlugin auto-activates client on request', () => {
   let relay: WsRelay | null = null;
 
   afterEach(async () => {
@@ -169,25 +169,24 @@ describe('TEST-S-004: sendToPlugin rejects for inactive client', () => {
     relay = null;
   });
 
-  it('rejects with "Another client is currently active" when inactive', async () => {
+  it('rejects with plugin-not-connected (not "inactive") when no plugin is present', async () => {
     const port = 39300 + Math.floor(Math.random() * 100);
 
-    // Start a relay and register a first client externally (so THIS server is inactive)
+    // Start a relay and register a first client externally (so THIS server starts inactive)
     relay = new WsRelay(port);
     await relay.start();
 
-    // Register first client externally
     const firstClient = new WebSocket(`ws://localhost:${port}`);
     await new Promise<void>((resolve) => firstClient.on('open', resolve));
     firstClient.send(JSON.stringify({ type: 'register', clientId: 'external-1', clientName: 'First Client' }));
     await wait(50);
 
-    // Our module connects as second (inactive) client
+    // Our module connects as second client
     startWsServer(port, 'Second Client');
     await wait(100);
 
-    // sendToPlugin should be rejected as inactive
-    await expect(sendToPlugin({ type: 'ping' }, 500)).rejects.toThrow(/Another client is currently active/i);
+    // No plugin connected — should fail with plugin-not-connected, not "inactive client"
+    await expect(sendToPlugin({ type: 'ping' }, 500)).rejects.toThrow(/Figma plugin is not connected/i);
 
     firstClient.close();
   }, 5000);

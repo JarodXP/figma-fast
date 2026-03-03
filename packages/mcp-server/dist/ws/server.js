@@ -134,11 +134,6 @@ function sendToPlugin(message, timeoutMs = DEFAULT_TIMEOUT_MS) {
             reject(new Error('Figma plugin is not connected. Open the FigmaFast plugin in Figma.'));
             return;
         }
-        if (!isActive) {
-            // We are registered but inactive — another client is controlling the relay
-            reject(new Error('Another client is currently active. Use the Figma plugin to switch the active client.'));
-            return;
-        }
         if (!pluginConnected) {
             reject(new Error('Figma plugin is not connected. Open the FigmaFast plugin in Figma.'));
             return;
@@ -159,7 +154,6 @@ function sendToPlugin(message, timeoutMs = DEFAULT_TIMEOUT_MS) {
 function isPluginConnected() {
     return (relayClientSocket !== null &&
         relayClientSocket.readyState === ws_1.WebSocket.OPEN &&
-        isActive &&
         pluginConnected);
 }
 // ── Private helpers ───────────────────────────────────────────────────────────
