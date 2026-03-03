@@ -37,15 +37,17 @@ registerImageTools(server);
 registerBooleanTools(server);
 registerBatchTools(server);
 
-// Start embedded WebSocket server
-startWsServer(WS_PORT);
+// Start embedded WebSocket server (connect to or start relay)
+const CLIENT_NAME = process.env.MCP_CLIENT_NAME || undefined;
+startWsServer(WS_PORT, CLIENT_NAME);
 
 // Connect via stdio transport
 const transport = new StdioServerTransport();
 server
   .connect(transport)
   .then(() => {
-    console.error(`[FigmaFast] MCP server running (stdio), WebSocket on port ${WS_PORT}`);
+    const nameInfo = CLIENT_NAME ? ` as "${CLIENT_NAME}"` : '';
+    console.error(`[FigmaFast] MCP server running (stdio), relay on port ${WS_PORT}${nameInfo}`);
   })
   .catch((err) => {
     console.error('[FigmaFast] Failed to start MCP server:', err);

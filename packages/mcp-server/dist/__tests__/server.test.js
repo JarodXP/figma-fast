@@ -14,7 +14,7 @@ const style_tools_js_1 = require("../tools/style-tools.js");
 const image_tools_js_1 = require("../tools/image-tools.js");
 const boolean_tools_js_1 = require("../tools/boolean-tools.js");
 const batch_tools_js_1 = require("../tools/batch-tools.js");
-// TEST-NF-001: MCP server starts and registers all 16 tools
+// TEST-NF-001: MCP server starts and registers all 17 tools
 (0, vitest_1.describe)('MCP server tool registration', () => {
     let server;
     let client;
@@ -27,7 +27,7 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
             // Ignore cleanup errors
         }
     });
-    (0, vitest_1.it)('registers exactly 16 tools with correct names', async () => {
+    (0, vitest_1.it)('registers exactly 17 tools with correct names', async () => {
         server = new mcp_js_1.McpServer({
             name: 'figma-fast-test',
             version: '0.1.0',
@@ -52,6 +52,7 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
             'get_local_components',
             'get_library_components',
             'export_node_as_image',
+            'get_image_fill',
             'modify_node',
             'delete_nodes',
             'move_node',
@@ -60,7 +61,7 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
             'combine_as_variants',
             'manage_component_properties',
         ];
-        (0, vitest_1.expect)(tools).toHaveLength(16);
+        (0, vitest_1.expect)(tools).toHaveLength(17);
         const toolNames = tools.map((t) => t.name);
         for (const expected of expectedTools) {
             (0, vitest_1.expect)(toolNames, `Expected tool "${expected}" to be registered`).toContain(expected);
@@ -127,12 +128,12 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('name');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('effects');
     });
-    // TEST-P7B-007: 22 tools total after Phase 7B
-    (0, vitest_1.it)('registers exactly 22 tools after Phase 7B', async () => {
+    // TEST-P7B-007: 23 tools total after Phase 7B
+    (0, vitest_1.it)('registers exactly 23 tools after Phase 7B', async () => {
         const { client: c } = await buildFullServerWithStyles();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(22);
+        (0, vitest_1.expect)(tools).toHaveLength(23);
     });
 });
 // TEST-P6-001, TEST-P6-003, TEST-P6-006, TEST-P6-009, TEST-P6-010
@@ -193,12 +194,12 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         const tool = tools.find((t) => t.name === 'set_current_page');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('pageId');
     });
-    // TEST-P6-010: 19 tools total after Phase 6
-    (0, vitest_1.it)('registers exactly 19 tools after Phase 6', async () => {
+    // TEST-P6-010: 20 tools total after Phase 6
+    (0, vitest_1.it)('registers exactly 20 tools after Phase 6', async () => {
         const { client: c } = await buildFullServer();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(19);
+        (0, vitest_1.expect)(tools).toHaveLength(20);
     });
 });
 // TEST-P8-001, TEST-P8-009
@@ -241,12 +242,12 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('nodeId');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('imageUrl');
     });
-    // TEST-P8-009: 23 tools total after Phase 8
-    (0, vitest_1.it)('registers exactly 23 tools after Phase 8', async () => {
+    // TEST-P8-009: 24 tools total after Phase 8
+    (0, vitest_1.it)('registers exactly 24 tools after Phase 8', async () => {
         const { client: c } = await buildFullServerWithImage();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(23);
+        (0, vitest_1.expect)(tools).toHaveLength(24);
     });
 });
 // TEST-P10C-001, TEST-P10D-001, TEST-P10C-007
@@ -300,12 +301,12 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('nodeIds');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('depth');
     });
-    // TEST-P10C-007: 26 tools total after Phase 10
-    (0, vitest_1.it)('registers exactly 26 tools after Phase 10', async () => {
+    // TEST-P10C-007: 27 tools total after Phase 10
+    (0, vitest_1.it)('registers exactly 27 tools after Phase 10', async () => {
         const { client: c } = await buildFullServerWithBatch();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(26);
+        (0, vitest_1.expect)(tools).toHaveLength(27);
     });
 });
 // TEST-P9-001, TEST-P9-002, TEST-P9-003, TEST-P9-010
@@ -349,12 +350,12 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('operation');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('nodeIds');
     });
-    // TEST-P9-010: 24 tools total after Phase 9
-    (0, vitest_1.it)('registers exactly 24 tools after Phase 9', async () => {
+    // TEST-P9-010: 25 tools total after Phase 9
+    (0, vitest_1.it)('registers exactly 25 tools after Phase 9', async () => {
         const { client: c } = await buildFullServerWithBoolean();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(24);
+        (0, vitest_1.expect)(tools).toHaveLength(25);
     });
 });
 //# sourceMappingURL=server.test.js.map

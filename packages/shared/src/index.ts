@@ -26,6 +26,11 @@ export type {
   ServerToPluginMessage,
   PluginToServerMessage,
   WsMessage,
+  RelayClientInfo,
+  ClientToRelayMessage,
+  RelayToClientMessage,
+  PluginToRelayMessage,
+  RelayToPluginMessage,
 } from './messages.js';
 
 export type { RgbaColor } from './colors.js';

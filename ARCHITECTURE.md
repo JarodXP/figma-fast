@@ -1,341 +1,224 @@
 # FigmaFast -- Technical Architecture
 
-> **Version:** 3.0.0
-> **Last updated:** 2026-02-19
+> **Version:** 4.0.0
+> **Last updated:** 2026-02-26
 
 ---
 
-## System Diagram
+## System Diagram (Current -- Pre-Relay)
 
 ```
-+------------------+        stdio (JSON-RPC)       +---------------------+
-|                  | <---------------------------> |                     |
-|  Claude / AI     |                               |  MCP Server         |
-|  (Claude Desktop |                               |  packages/          |
-|   or Claude Code)|                               |    mcp-server/      |
-|                  |                               |                     |
-+------------------+                               |  - Tool definitions |
-                                                   |  - Zod validation   |
-                                                   |  - Request/response |
-                                                   |    correlation      |
-                                                   |  - Image download   |
-                                                   |    (new in v2.0)    |
-                                                   |                     |
-                                                   |  +---------------+  |
-                                                   |  | Embedded WS   |  |
-                                                   |  | Server (:3056)|  |
-                                                   |  +-------+-------+  |
-                                                   +----------|----------+
-                                                              |
-                                                   WebSocket (JSON messages)
-                                                   (+ base64 image payloads)
-                                                              |
-                                                   +----------|----------+
-                                                   |  Figma Plugin       |
-                                                   |  packages/          |
-                                                   |    figma-plugin/    |
-                                                   |                     |
-                                                   |  +---------------+  |
-                                                   |  | UI iframe     |  |
-                                                   |  | (WS client)   |  |
-                                                   |  +-------+-------+  |
-                                                   |          | postMessage
-                                                   |  +-------+-------+  |
-                                                   |  | Main thread   |  |
-                                                   |  | (Figma API)   |  |
-                                                   |  +---------------+  |
-                                                   +---------------------+
++-------------------+         +--------------------+         +-------------------+
+| Claude Desktop    |  stdio  | MCP Server (pid 1) |  ws     | Figma Plugin      |
+| (AI Client)       | ------> | ws/server.ts       | <-----> | ui.html (WS)      |
++-------------------+         | :3056 BIND         |         | main.ts (sandbox) |
+                              +--------------------+         +-------------------+
+
++-------------------+         +--------------------+
+| Claude Code       |  stdio  | MCP Server (pid 2) |
+| (AI Client)       | ------> | ws/server.ts       |
++-------------------+         | :3056 FAILS        |  <-- EADDRINUSE
+                              +--------------------+
 ```
 
----
+## System Diagram (Phase 1 -- In-Process Relay)
 
-## Directory Structure (v3.0 projected)
+```
++-------------------+         +--------------------+     ws client     +-----------------+
+| Claude Desktop    |  stdio  | MCP Server (pid 1) | ----------------> |                 |
+| (AI Client)       | ------> | ws/server.ts       |                   |  WS Relay       |
++-------------------+         +--------------------+                   |  relay.ts       |
+                                                                       |  :3056          |
++-------------------+         +--------------------+     ws client     |                 |
+| Claude Code       |  stdio  | MCP Server (pid 2) | ----------------> |                 | <--- Figma Plugin
+| (AI Client)       | ------> | ws/server.ts       |                   |  (in pid 1)     |      ui.html
++-------------------+         +--------------------+                   +-----------------+
+
+Relay runs IN-PROCESS with the first MCP server (pid 1).
+If pid 1 exits, relay dies, pid 2 loses connection.
+```
+
+## System Diagram (Phase 3 -- Detached Relay)
+
+```
++-------------------+         +--------------------+     ws client     +-----------------+
+| Claude Desktop    |  stdio  | MCP Server (pid 1) | ----------------> |                 |
+| (AI Client)       | ------> | ws/server.ts       |                   |  WS Relay       |
++-------------------+         +--------------------+                   |  relay-process.ts|
+                                                                       |  :3056          |
++-------------------+         +--------------------+     ws client     |  (detached)     |
+| Claude Code       |  stdio  | MCP Server (pid 2) | ----------------> |  PID file:      | <--- Figma Plugin
+| (AI Client)       | ------> | ws/server.ts       |                   |  /tmp/figma-    |      ui.html
++-------------------+         +--------------------+                   |  fast-relay.pid |
+                                                                       +-----------------+
+
+Relay runs as DETACHED CHILD PROCESS.
+Survives parent exit. Auto-exits after 60s idle.
+```
+
+## Directory Structure
 
 ```
 figma-fast/
-├── packages/
-│   ├── shared/                     # Shared types & utilities (compiled with tsc)
-│   │   ├── src/
-│   │   │   ├── index.ts            # Re-exports all types and utilities
-│   │   │   ├── scene-spec.ts       # SceneNode -- THE core type
-│   │   │   ├── messages.ts         # WebSocket message protocol types
-│   │   │   ├── colors.ts           # hexToRgba / rgbaToHex conversion
-│   │   │   ├── fonts.ts            # Pure font logic (getFontStyle, collectFonts)
-│   │   │   ├── warnings.ts        # NEW: detectIgnoredProperties (warning system)
-│   │   │   └── __tests__/
-│   │   │       ├── colors.test.ts
-│   │   │       ├── fonts.test.ts
-│   │   │       └── warnings.test.ts # NEW: warning detection tests
-│   │   ├── dist/
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   │
-│   ├── mcp-server/                 # MCP server + embedded WebSocket server
-│   │   ├── src/
-│   │   │   ├── index.ts            # Entry: McpServer + StdioTransport + WS start
-│   │   │   ├── schemas.ts          # Shared Zod schemas (extracted in Phase 5.5)
-│   │   │   ├── ws/
-│   │   │   │   └── server.ts       # WS server, request correlation, sendToPlugin()
-│   │   │   ├── tools/
-│   │   │   │   ├── ping.ts         # ping tool
-│   │   │   │   ├── build-scene.ts  # build_scene tool (+ image pre-download in v2.0)
-│   │   │   │   ├── read-tools.ts   # 7 read tools (get_document_info, etc.)
-│   │   │   │   ├── edit-tools.ts   # 4 edit tools (modify_node, etc.)
-│   │   │   │   ├── component-tools.ts # 3 component lifecycle tools
-│   │   │   │   ├── page-tools.ts   # NEW: 3 page management tools
-│   │   │   │   ├── style-tools.ts  # NEW: 3 style creation tools
-│   │   │   │   ├── image-tools.ts  # NEW: set_image_fill tool
-│   │   │   │   ├── boolean-tools.ts # NEW: boolean_operation tool
-│   │   │   │   └── batch-tools.ts  # NEW: batch_modify + batch_get_node_info tools
-│   │   │   └── __tests__/
-│   │   │       ├── schemas.test.ts
-│   │   │       ├── server.test.ts
-│   │   │       └── ws-server.test.ts
-│   │   ├── dist/
-│   │   ├── package.json
-│   │   └── tsconfig.json
-│   │
-│   └── figma-plugin/               # Figma plugin (bundled with esbuild)
-│       ├── src/
-│       │   ├── main.ts             # Plugin entry: message routing
-│       │   ├── ui.html             # WS client + status UI
-│       │   ├── handlers.ts         # All handlers (+ page, style, image, boolean in v2.0)
-│       │   ├── serialize-node.ts   # Node-to-JSON serializer
-│       │   └── scene-builder/
-│       │       ├── index.ts        # buildScene orchestrator
-│       │       ├── build-node.ts   # Recursive buildNode + property helpers
-│       │       └── fonts.ts        # collectFonts, preloadFonts, getFontStyle
-│       ├── dist/
-│       ├── manifest.json
-│       ├── build.mjs
-│       ├── package.json
-│       └── tsconfig.json
-│
-├── prompts_templates/
-│   └── FIGMA_DESIGN_ARCHITECT.md
-│
-├── package.json                    # Workspace root
-├── tsconfig.base.json
-├── vitest.config.ts
-├── eslint.config.js
-├── .prettierrc
-├── REFERENCE.md                    # Figma API patterns (1081 lines)
-├── PROGRESSION.md                  # Original build checklist
-├── README.md
-├── PLAN.md                         # CTO strategic plan
-├── ARCHITECTURE.md                 # This file
-├── TESTS.md                        # Test specifications
-├── TASKS.md                        # Granular task breakdown
-└── PROGRESS.md                     # Sprint progress tracker
+  packages/
+    mcp-server/
+      src/
+        index.ts                  # Entry point: starts MCP + WS
+        schemas.ts                # Zod schemas for tool parameters
+        ws/
+          server.ts               # sendToPlugin, isPluginConnected, startWsServer
+          relay.ts                # [NEW] WsRelay class -- relay server logic
+          relay-process.ts        # [NEW] Standalone relay entry point (Phase 3)
+        tools/
+          ping.ts                 # 1 tool
+          build-scene.ts          # 1 tool
+          read-tools.ts           # 6 tools (get_document_info, get_node_info, get_selection, get_styles, get_local_components, get_library_components, export_node_as_image, get_image_fill)
+          edit-tools.ts           # 4 tools (modify_node, delete_nodes, move_node, clone_node)
+          component-tools.ts      # 3 tools (convert_to_component, combine_as_variants, manage_component_properties)
+          page-tools.ts           # 3 tools (create_page, rename_page, set_current_page)
+          style-tools.ts          # 3 tools (create_paint_style, create_text_style, create_effect_style)
+          image-tools.ts          # 1 tool (set_image_fill)
+          boolean-tools.ts        # 1 tool (boolean_operation)
+          batch-tools.ts          # 2 tools (batch_modify, batch_get_node_info)
+        __tests__/
+          server.test.ts          # MCP tool registration tests
+          ws-server.test.ts       # WS server unit tests
+          schemas.test.ts         # Schema validation tests
+          relay.test.ts           # [NEW] Relay server tests
+          relay-detached.test.ts  # [NEW] Detached relay tests (Phase 3)
+    figma-plugin/
+      src/
+        main.ts                   # Plugin main thread (Figma sandbox)
+        handlers.ts               # Command handlers (1000+ lines)
+        serialize-node.ts         # Node serialization
+        ui.html                   # Plugin UI with WS client [MODIFIED in Phase 2]
+        scene-builder/
+          index.ts                # Scene builder orchestrator
+          build-node.ts           # Node creation logic
+          fonts.ts                # Font management
+      manifest.json               # devAllowedDomains: ws://localhost:3056
+    shared/
+      src/
+        index.ts                  # Public exports
+        messages.ts               # WS message types [MODIFIED -- relay types added]
+        scene-spec.ts             # Scene node type definitions
+        colors.ts                 # Color utilities
+        fonts.ts                  # Font utilities
+        warnings.ts               # Warning detection
+        __tests__/                # Unit tests for utilities
 ```
 
----
+## Data Flow (Phase 1+2)
 
-## Data Flow
-
-### 1. build_scene (Happy Path -- v2.0 with Image Support)
+### Command Flow (Active Client)
 
 ```
-Claude sends: tools/call "build_scene" { scene: SceneNode, parentNodeId?: string }
-  |
-  v
-MCP Server (build-scene.ts):
-  1. Validate params with Zod SceneNodeSchema
-  2. Check isPluginConnected()
-  3. NEW: Walk scene tree, find all IMAGE fills with imageUrl
-  4. NEW: Fetch each image URL in parallel (30s timeout per image)
-  5. NEW: Build imagePayloads map { imageUrl -> base64Data }
-  6. Call sendToPlugin({ type: 'build_scene', spec, parentId, imagePayloads }, 120_000ms)
-  |
-  v
-WS Server -> Plugin UI -> Plugin Main Thread -> Scene Builder:
-  1. Determine parent node
-  2. collectFonts(spec) + preloadFonts()
-  3. commitUndo() -- start batch
-  4. buildNode(spec, parent, idMap, failedFonts, imagePayloads) -- RECURSIVE:
-     a. createNode(spec)
-     b. Apply name, geometry, position
-     c. Apply fills (NEW: IMAGE fills use imagePayloads to create images)
-     d. Apply strokes, effects, cornerRadius, opacity
-     e. Apply style bindings (fillStyleId, textStyleId, effectStyleId) -- NEW
-     f. Apply auto-layout
-     g. Append to parent
-     h. Apply text properties
-     i. Apply sizing
-     j. Apply component instance overrides
-     k. Record id -> node.id
-     l. Recurse into children
-  5. commitUndo() -- end batch
-  6. Scroll viewport
-  7. Return result
+1. AI Client sends tool call via MCP stdio
+2. MCP Server tool handler calls sendToPlugin(message)
+3. ws/server.ts sends message over WS client connection to relay
+4. WS Relay receives message, checks sender is active client
+5. Relay forwards message to Figma plugin socket
+6. Plugin ui.html receives via ws.onmessage
+7. Plugin ui.html forwards to main.ts via parent.postMessage
+8. Plugin main.ts processes command, calls handler
+9. Handler returns result
+10. Plugin main.ts sends result via figma.ui.postMessage
+11. Plugin ui.html receives via window.onmessage
+12. Plugin ui.html sends result over WS to relay
+13. Relay receives result, looks up correlation ID in pendingMessageSources
+14. Relay forwards result to originating MCP client socket
+15. ws/server.ts receives result, resolves pending Promise
+16. Tool handler formats and returns result to AI client
 ```
 
-### 2. set_image_fill (New Data Flow)
+### Command Flow (Inactive Client)
 
 ```
-Claude sends: tools/call "set_image_fill" { nodeId: "123:456", imageUrl: "https://..." }
-  |
-  v
-MCP Server (image-tools.ts):
-  1. Validate URL (Zod .url())
-  2. fetch(imageUrl) with 30s AbortController timeout
-  3. response.arrayBuffer() -> Buffer.from() -> .toString('base64')
-  4. sendToPlugin({ type: 'set_image_fill', nodeId, imageData: base64, scaleMode })
-  |
-  v
-Plugin (handlers.ts):
-  1. base64Decode(imageData) -> Uint8Array
-  2. figma.createImage(bytes) -> image
-  3. node.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode }]
-  4. Return { nodeId, name, imageHash }
+1. AI Client sends tool call via MCP stdio
+2. MCP Server tool handler calls sendToPlugin(message)
+3. ws/server.ts sends message over WS client connection to relay
+4. WS Relay receives message, checks sender is INACTIVE
+5. Relay sends immediate error: { type: "relay_error", id, error: "Another client is currently active..." }
+6. ws/server.ts receives relay_error, rejects pending Promise
+7. Tool handler returns error to AI client
 ```
 
-### 3. Request/Response Correlation (unchanged)
+### Client Switch Flow (Phase 2)
 
-Every message includes UUID `id` for correlation. WS server maintains `Map<string, PendingRequest>`. Timeouts auto-reject.
-
-### 4. Plugin Communication Model (unchanged)
-
-UI iframe bridges WebSocket to main thread via `postMessage`. Main thread has Figma API access, no network. UI has network, no Figma API.
-
----
+```
+1. Relay broadcasts { type: "client_list", clients: [...] } to plugin on any registry change
+2. Plugin ui.html renders client list with radio buttons
+3. User clicks inactive client
+4. Plugin ui.html sends { type: "set_active_client", clientId } to relay via WS
+5. Relay updates activeClientId
+6. Relay sends { type: "activated" } to new active client
+7. Relay sends { type: "deactivated", reason } to old active client
+8. Relay broadcasts updated client_list to plugin
+9. Plugin ui.html re-renders client list
+```
 
 ## API Contracts
 
-### MCP Tools (26 total after v3.0)
+### ws/server.ts Exported API (UNCHANGED)
 
-| Tool | Type | Input Schema | Timeout | Plugin-Routed | Phase |
-|------|------|-------------|---------|---------------|-------|
-| `ping` | connectivity | `{}` | 10s | Yes | 1 |
-| `build_scene` | creation | `{ scene: SceneNode, parentNodeId? }` | 120s | Yes | 2 |
-| `get_document_info` | read | `{}` | 30s | Yes | 3 |
-| `get_node_info` | read | `{ nodeId, depth? }` | 30s | Yes | 3 |
-| `get_selection` | read | `{}` | 30s | Yes | 3 |
-| `get_styles` | read | `{}` | 30s | Yes | 3 |
-| `get_local_components` | read | `{}` | 30s | Yes | 3 |
-| `get_library_components` | read | `{ fileKey, query? }` | 30s | No (REST) | 5 |
-| `export_node_as_image` | read | `{ nodeId, format?, scale? }` | 30s | Yes | 3 |
-| `modify_node` | edit | `{ nodeId, properties }` | 30s | Yes | 3 |
-| `delete_nodes` | edit | `{ nodeIds }` | 30s | Yes | 3 |
-| `move_node` | edit | `{ nodeId, x?, y?, parentId?, index? }` | 30s | Yes | 3 |
-| `clone_node` | edit | `{ nodeId }` | 30s | Yes | 3 |
-| `convert_to_component` | component | `{ nodeId }` | 30s | Yes | 5 |
-| `combine_as_variants` | component | `{ nodeIds, name? }` | 30s | Yes | 5 |
-| `manage_component_properties` | component | `{ componentId, action, properties }` | 30s | Yes | 5 |
-| `create_page` | page | `{ name }` | 30s | Yes | **6** |
-| `rename_page` | page | `{ pageId, name }` | 30s | Yes | **6** |
-| `set_current_page` | page | `{ pageId }` | 30s | Yes | **6** |
-| `create_paint_style` | style | `{ name, fills }` | 30s | Yes | **7B** |
-| `create_text_style` | style | `{ name, fontFamily?, fontSize?, ... }` | 30s | Yes | **7B** |
-| `create_effect_style` | style | `{ name, effects }` | 30s | Yes | **7B** |
-| `set_image_fill` | image | `{ nodeId, imageUrl, scaleMode? }` | 60s | Hybrid | **8** |
-| `boolean_operation` | shape | `{ operation, nodeIds }` | 30s | Yes | **9** |
-| `batch_modify` | batch-edit | `{ modifications: [{nodeId, properties}, ...] }` | 30s | Yes | **10C** |
-| `batch_get_node_info` | batch-read | `{ nodeIds, depth? }` | 30s | Yes | **10D** |
+```typescript
+// Start the relay (or connect to existing) and register as a client
+export function startWsServer(port?: number, clientName?: string): void;
 
-### WebSocket Message Protocol (v2.0)
+// Send a message to the Figma plugin via the relay. Rejects if inactive or plugin not connected.
+export function sendToPlugin(
+  message: DistributiveOmit<ServerToPluginMessage, 'id'>,
+  timeoutMs?: number,
+): Promise<PluginToServerMessage>;
 
-**Server -> Plugin:** `ServerToPluginMessage` (25 message types -- batch_modify already existed)
-**Plugin -> Server:** `PluginToServerMessage` (2 types: `pong` | `result`)
-
-New message types in v3.0:
-- `batch_get_node_info` (Phase 10D)
-
-Message types in v2.0:
-- `create_page` (Phase 6)
-- `rename_page` (Phase 6)
-- `set_current_page` (Phase 6)
-- `create_paint_style` (Phase 7B)
-- `create_text_style` (Phase 7B)
-- `create_effect_style` (Phase 7B)
-- `set_image_fill` (Phase 8)
-- `boolean_operation` (Phase 9)
-
-### SceneNode Spec (Core Contract -- v2.0 additions)
-
-New fields on SceneNode:
-- `fillStyleId?: string` -- Bind a paint style by ID (Phase 7A)
-- `textStyleId?: string` -- Bind a text style by ID (Phase 7A)
-- `effectStyleId?: string` -- Bind an effect style by ID (Phase 7A)
-
-New fields on Fill:
-- `imageUrl?: string` -- URL for IMAGE fill type (Phase 8, server downloads)
-
-### Warning System (v3.0)
-
-```
-detectIgnoredProperties(nodeType: string, parentType: string | undefined, properties: Record<string, unknown>): string[]
+// Check if this client can send to the plugin (connected to relay and active)
+export function isPluginConnected(): boolean;
 ```
 
-Pure function in `@figma-fast/shared/warnings`. No Figma API dependency. Returns `[warning]`-prefixed strings.
+### WsRelay Class API (NEW)
 
-Integrated into:
-- `handleModifyNode` / `applyNodeModifications` (via handlers.ts)
-- `buildNode` (via build-node.ts)
-- `handleBatchModify` (via the shared `applyNodeModifications` core)
+```typescript
+export class WsRelay {
+  constructor(port: number);
+  start(): Promise<void>;
+  close(): Promise<void>;
 
-### Refactored modify_node Architecture (v3.0)
-
-```
-handleModifyNode(nodeId, properties)
-  -> applyNodeModifications(nodeId, properties)  // core logic, no commitUndo
-  -> commitUndo()
-
-handleBatchModify(modifications[])
-  -> for each: applyNodeModifications(mod.nodeId, mod.properties)
-  -> commitUndo() // once for entire batch
+  // Read-only accessors for testing
+  get clientRegistry(): Map<string, { socket: WebSocket; clientName: string; connectedAt: number }>;
+  get currentActiveClientId(): string | null;
+  get currentPluginSocket(): WebSocket | null;
+}
 ```
 
----
+### Relay Message Protocol
+
+```
+MCP Client -> Relay:
+  { type: "register", clientId: string, clientName: string }
+  { type: "ping"|"build_scene"|..., id: string, ... }  (any ServerToPluginMessage)
+
+Relay -> MCP Client:
+  { type: "registered", clientId: string, isActive: boolean }
+  { type: "activated" }
+  { type: "deactivated", reason: string }
+  { type: "relay_error", id: string, error: string }
+  { type: "pong"|"result", id: string, ... }  (any PluginToServerMessage)
+
+Plugin -> Relay:
+  { type: "hello", ts: number }
+  { type: "set_active_client", clientId: string }
+  { type: "pong"|"result", id: string, ... }  (any PluginToServerMessage)
+
+Relay -> Plugin:
+  { type: "client_list", clients: RelayClientInfo[] }
+  { type: "ping"|"build_scene"|..., id: string, ... }  (any ServerToPluginMessage, forwarded from active client)
+```
 
 ## Conventions
 
-### Code Style
-- TypeScript strict mode everywhere
-- ES module imports with `.js` extension (Node16 module resolution)
-- Figma plugin bundled to IIFE ES2015 target
-- Error handling: try/catch with descriptive error messages, errors collected in arrays
-- Console logging: `console.error()` for MCP server (avoids contaminating stdio)
-- ESLint + Prettier configured (Phase 5.5)
-
-### Naming
-- Files: kebab-case (`build-node.ts`, `page-tools.ts`)
-- Types: PascalCase (`SceneNode`, `BuildResult`)
-- Functions: camelCase (`buildNode`, `handleCreatePage`)
-- Constants: UPPER_SNAKE for timeouts and config
-- Packages: `@figma-fast/shared`, `@figma-fast/mcp-server`, `@figma-fast/figma-plugin`
-
-### Tool Registration Pattern
-- One `register<Category>Tools(server: McpServer)` function per tool file
-- All called from `packages/mcp-server/src/index.ts`
-- Tools follow NOT_CONNECTED / sendToPlugin / response format / error handling pattern
-
-### Plugin Handler Pattern
-- One `handle<Action>(params): Promise<unknown>` function per handler
-- All in `packages/figma-plugin/src/handlers.ts`
-- Routed via switch statement in `packages/figma-plugin/src/main.ts`
-- Always return structured data (not raw strings)
-- Collect errors in arrays, never throw for partial failures
-
-### Build Order
-`shared` -> `mcp-server` -> `figma-plugin` (plugin bundles shared via esbuild)
-
-### Port Convention
-- Default WS port: 3056 (configurable via `FIGMA_FAST_PORT`)
-- ClaudeTalkToFigma uses 3055 (no conflict)
-
----
-
-## Known Technical Debt
-
-1. **No CI/CD** -- No GitHub Actions, no pre-commit hooks (gap from v1.0, still unresolved)
-2. **GROUP is a FRAME hack** -- `figma.createFrame()` with no fills, not actual `figma.group()`
-3. **Image fill not supported** -- Renders as gray placeholder (RESOLVING in Phase 8)
-4. **Style binding not supported** -- Cannot apply styles by ID (RESOLVING in Phase 7A)
-5. **Gradient fill limited** -- GradientTransform defaults to identity if not provided
-6. **No input sanitization** -- Hex color parsing trusts input format
-7. **commitUndo fragile** -- Wrapped in try/catch with silent failure
-8. **Plugin handler tests blocked by Figma sandbox** -- Cannot unit test handlers that call figma.* without mocking framework
-9. **handlers.ts growing large** -- 900+ lines after v2.0, will grow further with batch handlers. Split into handlers/ directory after v3.0 if it exceeds 1200 lines.
-10. **serialize-node.ts missing style ID serialization** -- Does not return fillStyleId/textStyleId/effectStyleId on read (should add in Phase 7A)
-11. **Warning system covers only 4 rules** -- Many more Figma quirks exist (cornerRadius on ELLIPSE, etc.). Expand as usage data reveals more silent-ignore patterns.
+- **Logging**: All log messages go to stderr (`console.error`), prefixed with `[FigmaFast]`
+- **Ports**: Default 3056, configurable via `FIGMA_FAST_PORT` env var
+- **UUIDs**: Generated with Node.js `crypto.randomUUID()`
+- **Error handling**: Never crash on malformed messages. Log and continue.
+- **Module pattern**: ES modules throughout, `.js` extension in imports
+- **Test ports**: Random high ports (39000+) to avoid conflicts. Each test file uses a unique range.

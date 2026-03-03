@@ -3,8 +3,12 @@
 A high-performance MCP server for Figma. Build entire designs — complete with components, styles, images, and boolean shapes — in a single tool call instead of dozens of individual operations.
 
 ```
-Claude / AI  <--stdio-->  MCP Server  <--WebSocket-->  Figma Plugin
+Claude Code    <--stdio-->  MCP Server ─┐
+                                        ├─ WS Relay  <--WebSocket-->  Figma Plugin
+Claude Desktop <--stdio-->  MCP Server ─┘
 ```
+
+Multiple AI clients (e.g. Claude Code and Claude Desktop) can connect simultaneously. The Figma plugin shows all connected clients and lets you switch which one is active — no restarts needed.
 
 ## Why FigmaFast?
 
@@ -116,7 +120,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
   "mcpServers": {
     "figma-fast": {
       "command": "node",
-      "args": ["/absolute/path/to/figma-fast/packages/mcp-server/dist/index.js"]
+      "args": ["/absolute/path/to/figma-fast/packages/mcp-server/dist/index.js"],
+      "env": { "MCP_CLIENT_NAME": "Claude Desktop" }
     }
   }
 }
@@ -131,15 +136,27 @@ Add to `.mcp.json` in your project root:
   "mcpServers": {
     "figma-fast": {
       "command": "node",
-      "args": ["/absolute/path/to/figma-fast/packages/mcp-server/dist/index.js"]
+      "args": ["/absolute/path/to/figma-fast/packages/mcp-server/dist/index.js"],
+      "env": { "MCP_CLIENT_NAME": "Claude Code" }
     }
   }
 }
 ```
 
+`MCP_CLIENT_NAME` is optional but recommended when running multiple clients — it labels each client in the plugin's connection picker.
+
 ### 4. Verify
 
 Ask Claude: *"Ping the Figma plugin"* -- you should get a `pong` response with round-trip time.
+
+### Using multiple AI clients simultaneously
+
+When both Claude Code and Claude Desktop are running:
+
+1. The first client to start becomes the **active** client and controls Figma
+2. The second client connects but is **inactive** — its tool calls return a clear error rather than silently failing
+3. Open the FigmaFast plugin panel in Figma — you'll see both clients listed
+4. Click a client name to switch which one is active — no restarts needed
 
 ## Usage Examples
 
@@ -259,11 +276,11 @@ figma-fast/
 │   │       ├── colors.ts        # Hex <-> RGBA conversion
 │   │       ├── fonts.ts         # Font style mapping & collection
 │   │       └── warnings.ts     # Property constraint detection
-│   ├── mcp-server/          # MCP server + embedded WebSocket
+│   ├── mcp-server/          # MCP server + WS relay client
 │   │   └── src/
-│   │       ├── index.ts         # Entry: stdio MCP + WS server
+│   │       ├── index.ts         # Entry: stdio MCP + WS relay
 │   │       ├── schemas.ts       # Shared Zod validation schemas
-│   │       ├── tools/           # MCP tool definitions (26 tools)
+│   │       ├── tools/           # MCP tool definitions (27 tools)
 │   │       │   ├── build-scene.ts    # Declarative scene builder
 │   │       │   ├── read-tools.ts     # 7 read/inspect tools
 │   │       │   ├── edit-tools.ts     # 4 edit/manipulation tools
@@ -274,7 +291,9 @@ figma-fast/
 │   │       │   ├── image-tools.ts    # Image fill from URL
 │   │       │   ├── boolean-tools.ts  # Boolean shape operations
 │   │       │   └── ping.ts          # Health check
-│   │       └── ws/server.ts     # WebSocket server
+│   │       └── ws/
+│   │           ├── server.ts    # WS client: start-or-connect relay logic
+│   │           └── relay.ts     # WS relay: multi-client routing
 │   └── figma-plugin/        # Figma plugin
 │       ├── manifest.json
 │       └── src/
@@ -295,11 +314,14 @@ figma-fast/
 ### How it works
 
 1. **Claude** calls an MCP tool (e.g. `build_scene`) via stdio
-2. **MCP Server** validates params, sends a WebSocket message to the plugin
+2. **MCP Server** validates params, routes the command through the WS relay
+   - The first MCP server to start launches the relay in-process on port 3056
+   - Subsequent MCP servers detect the relay and connect as clients
    - For image fills, the server downloads images and sends base64-encoded data
-3. **Plugin UI** (iframe) receives the WS message, forwards to the main thread via `postMessage`
-4. **Plugin Main Thread** executes Figma API calls (create nodes, read properties, export, apply images)
-5. **Response** flows back: main thread -> UI iframe -> WebSocket -> MCP server -> Claude
+3. **WS Relay** forwards the command to the Figma plugin (only the active client can send)
+4. **Plugin UI** (iframe) receives the WS message, forwards to the main thread via `postMessage`
+5. **Plugin Main Thread** executes Figma API calls (create nodes, read properties, export, apply images)
+6. **Response** flows back: main thread -> UI iframe -> relay -> active MCP server -> Claude
 
 All requests use a correlation ID for reliable request/response matching with configurable timeouts.
 
@@ -530,7 +552,8 @@ Warnings appear in the response as `[warning]`-prefixed messages, helping AI age
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `FIGMA_FAST_PORT` | `3056` | WebSocket server port |
+| `FIGMA_FAST_PORT` | `3056` | WebSocket relay port |
+| `MCP_CLIENT_NAME` | *(auto)* | Display name shown in the plugin's client picker |
 
 To change the port, also update `WS_URL` in `packages/figma-plugin/src/ui.html` and `devAllowedDomains` in `packages/figma-plugin/manifest.json`, then rebuild.
 
@@ -574,12 +597,18 @@ Figma does NOT hot-reload plugin code automatically.
 ## Troubleshooting
 
 **Plugin shows "Connecting..." (yellow dot)**
-- Make sure the MCP server is running (it starts the WebSocket server)
-- Check that port 3056 isn't in use by another process: `lsof -i :3056`
+- Make sure at least one MCP server is running (the first one starts the relay)
+- Check that port 3056 is reachable: `lsof -i :3056`
 
 **Plugin shows "Disconnected" (red dot)**
-- The MCP server may have stopped. Restart your AI client to relaunch it.
+- All MCP servers may have stopped. Restart your AI client to relaunch them.
 - If using a custom port, ensure the plugin UI and manifest match.
+
+**Tool calls return "not active client" error**
+- Another AI client is currently active. Open the FigmaFast plugin panel and click your client to make it active.
+
+**Client shows as "MCP Client \<uuid\>" in the plugin**
+- Set `MCP_CLIENT_NAME` in your AI client's MCP config `env` field to give it a human-readable name.
 
 **"Syntax error: Unexpected token" in Figma console**
 - The plugin must be built with esbuild target `es2015`. Check `packages/figma-plugin/build.mjs`.

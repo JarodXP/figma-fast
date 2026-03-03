@@ -1,290 +1,160 @@
 # FigmaFast -- Strategic Plan
 
-> **Version:** 3.0.0
-> **Last updated:** 2026-02-19
-> **CTO audit status:** Performance Optimization Phase planned
+> **Version:** 4.0.0
+> **Last updated:** 2026-02-26
+> **CTO audit status:** Multi-Client Connection Switching planned
+> **Source PRD:** `docs/prds/multi-client-connection-switching.md`
 
 ---
 
 ## Summary
 
-FigmaFast is a high-performance MCP server for Figma that enables AI assistants (Claude) to build entire designs in a single tool call via a declarative scene tree (`build_scene`). The architecture is a three-part monorepo: `shared` types, a Node.js MCP server with embedded WebSocket, and a Figma plugin (main thread + UI iframe bridge). It replaces the "one node per tool call" pattern of ClaudeTalkToFigma with batch operations -- 10-50x fewer tool calls.
-
-**v2.0 scope:** Extend FigmaFast with design system primitives: styles, page management, boolean operations, and image fills. Variable support deferred to v3.0.
-
----
+Add WebSocket relay architecture so multiple MCP server processes (Claude Desktop + Claude Code) can coexist on port 3056 without conflicts. First server to start becomes the relay; subsequent servers connect as relay clients. The Figma plugin connects to the relay as before (same URL, same port). A UI picker in the plugin panel lets the user choose which AI client is active. Only the active client's commands are forwarded to the plugin; inactive clients receive immediate rejection with an actionable error message.
 
 ## Project Baseline
 
-| Attribute | Value |
-|-----------|-------|
-| Repo | `/Users/jarod/Projects/vortex/figma-fast` |
-| Language | TypeScript (strict) |
-| Runtime | Node.js >= 18 |
-| Package manager | npm workspaces |
-| Build tool | tsc (shared, mcp-server), esbuild (plugin) |
-| MCP SDK | `@modelcontextprotocol/sdk ^1.12.1` |
-| WebSocket | `ws ^8.18.0` |
-| Validation | `zod ^3.24.2` |
-| Plugin typings | `@figma/plugin-typings ^1.106.0` |
-| Test framework | vitest ^4.0.18 |
-| Total commits | ~13 |
-| Contributors | 1 (sole developer) |
-| Branches | 1 (main only) |
-| Tags | None |
-| CI/CD | None (gap) |
-| Test coverage | 60 tests, all passing |
-| Linting | ESLint (flat config) |
-| Formatting | Prettier |
-| MCP tools | 24 |
-
----
+- **Repo**: figma-fast (monorepo: packages/mcp-server, packages/figma-plugin, packages/shared)
+- **Created**: 2025 (initial version)
+- **Last active**: 2026-02-26
+- **Contributors**: 1 primary
+- **Releases**: no tags, HEAD at `a2608ce`
+- **CI/CD**: none detected
+- **Test framework**: Vitest 4.x, Node environment
+- **Test coverage**: 6 test files, 74 total tests (68 passing, 6 failing -- stale tool count assertions)
+- **Language**: TypeScript 5.9, ESM modules, Node16 module resolution
+- **Runtime**: Node.js (ES2022 target)
+- **Build**: tsc for mcp-server/shared, esbuild for figma-plugin
+- **Package manager**: npm workspaces
+- **WS library**: `ws` 8.18
+- **MCP SDK**: `@modelcontextprotocol/sdk` 1.12.1
 
 ## Requirements Challenges
 
-### Previous (v1.0 -- retained)
-
-| # | Original Requirement | Concern | Recommendation | Impact |
-|---|----------------------|---------|----------------|--------|
-| RC-1 | `batch_modify` tool | Redundant -- compose with multiple `modify_node` calls | DEFER pending latency measurement | Saves 3-4 days |
-| RC-2 | `batch_text_replace` with regex | Gold-plating. Risk of unexpected replacements | Drop regex, use simple find/replace if needed | Simpler validation |
-| RC-3 | `npx figma-fast` distribution | Premature for private tool | DEFER until stable | Significant effort saved |
-| RC-4 | Chunked scene building (>200 nodes) | No evidence of hitting limit | DEFER. Add telemetry first | Avoids premature optimization |
-| RC-5 | GROUP as "FRAME with no fills" | Not a real GROUP | Acceptable shortcut, documented | Low risk |
-| RC-6 | Zero test coverage | CRITICAL gap | Phase 5.5 COMPLETED -- 42 tests | RESOLVED |
-| RC-7 | No CI/CD pipeline | No automated verification | Still a gap. Add before v2.0 features ship | Prevents regressions |
-| RC-8 | No linting/formatting | Style drift | Phase 5.5 COMPLETED -- eslint + prettier | RESOLVED |
-
-### v2.0 -- Design System Feature Pack (ALL COMPLETE)
-
-All v2.0 requirements delivered: Phases 6-9 complete. 24 tools, 60 tests.
-
-### New (v3.0 -- Performance Optimizations)
-
-| # | Original Requirement | Concern | Recommendation | Impact |
-|---|----------------------|---------|----------------|--------|
-| RC-16 | `batch_modify` tool | Previously deferred (RC-1). Now justified by real-world data: 62 tool calls observed where ~15-20 should suffice. Each MCP round trip costs Claude tokens in tool-call overhead. | **ACCEPT.** Message type and Modification interface already exist in messages.ts. Refactor handleModifyNode into shared core function (applyNodeModifications) + wrapper. Single commitUndo for entire batch. | High impact: estimated 3-4x tool call reduction per session. |
-| RC-17 | `batch_get_node_info` tool | Trivial read-side batch. Loop + serialize. | **ACCEPT AS-IS.** Follows delete_nodes pattern. Separate tool (not overloading get_node_info) to preserve schema clarity. | Medium impact: eliminates N read calls when inspecting multiple nodes. |
-| RC-18 | Warning system for silently-ignored operations | High value for Claude decision quality. Currently modify_node returns success even when properties are silently dropped by Figma. | **ACCEPT with scope expansion.** Warnings should surface in BOTH modify_node/batch_modify AND build_scene. Limit to 4 high-confidence cases initially. Purely additive (warnings in errors array, non-blocking). | High impact: prevents Claude from wasting tokens on retry loops for operations that never had an effect. |
-
----
-
-**v2.0 requirements (all complete):**
-
-| # | Original Requirement | Concern | Recommendation | Impact |
-|---|----------------------|---------|----------------|--------|
-| RC-9 | Create Components & Component Sets in build_scene | **ALREADY FULLY IMPLEMENTED** in Phase 5. COMPONENT and COMPONENT_SET are node types in SceneNodeSchema. build-node.ts handles both including reversed build order for COMPONENT_SET. | **CUT ENTIRELY.** Zero work needed. | Saves entire feature scope. |
-| RC-10 | Component Instance Overrides in build_scene | **ALREADY FULLY IMPLEMENTED** in Phase 5. `overrides: Record<string, boolean \| string>` exists on SceneNode. build-node.ts lines 466-485 handle overrides via setProperties() with name prefix matching. variantProperties is a subset of this. `swapComponent` also works. | **CUT ENTIRELY.** Zero work needed. | Saves entire feature scope. |
-| RC-11 | Create & Bind Styles | Genuinely missing. get_styles exists (read-only) but no creation or binding. Style binding is high value + trivial. Style creation is medium value + moderate effort. | **SPLIT:** Phase 7A = binding (fillStyleId/textStyleId/effectStyleId on modify_node + build_scene). Phase 7B = creation tools. | Delivers value incrementally. |
-| RC-12 | Create & Bind Variables | Most complex feature. Variable creation + collections + modes + binding touches every property type. Variable BINDING alone (applying existing vars) would unblock 80% of use cases. | **DESCOPE creation to v3.0.** v2.0 gets binding only (Phase 10). Defer entirely if Phases 6-9 are not stable. | Massive risk reduction. |
-| RC-13 | Page Management | Low risk, straightforward. figma.createPage(), page.name, figma.setCurrentPageAsync(). REFERENCE.md already documents patterns. | **ACCEPT AS-IS.** Ship first -- quick win. | Unblocks multi-page workflows. |
-| RC-14 | Boolean Operations | figma.union/subtract/intersect/exclude are well-established. However, BOOLEAN_OPERATION as a build_scene node type is problematic -- requires child nodes to exist first (same problem as GROUP). | **ACCEPT tool only. REJECT node type.** Ship `boolean_operation` tool. Do NOT add to build_scene. | Avoids GROUP-like hack. |
-| RC-15 | Image Fills from URL | Plugin sandbox CANNOT fetch(). Image download MUST happen in MCP server (Node.js), then base64 bytes sent via WS. Fundamentally different data flow than other tools. build_scene IMAGE support needs server-side fetch during build OR a two-pass approach (upload first, reference by hash). | **ACCEPT with architecture caveat.** Server-side download, plugin-side createImage(). | New WS message shape with large payloads. |
-
----
+| # | Original Requirement | Challenge | Recommendation | Status |
+|---|---------------------|-----------|----------------|--------|
+| 1 | FR-1.8: Detect relay or start one | Race condition when two processes start simultaneously (EC-1.1). Retry logic needs specification. | 3 retries, 300ms initial delay, 1.5x backoff. Max wait ~1.35s. After 3 failures, fall back to standalone mode. | Accepted |
+| 2 | FR-1.11: Relay exits when all disconnect | In Slice 1 (in-process relay), relay IS the host process. Cannot exit independently. | FR-1.11 is a Slice 3 concern only. In Slice 1 relay dies with its host process. | Accepted |
+| 3 | FR-2.5: Single client shows no switcher | Premature UI optimization. Adds conditional rendering complexity for no real benefit. | Show client list always, even with one client. One selected radio is self-explanatory. | Accepted |
+| 4 | EC-2.1: Defer switch during in-flight command | Adds significant state tracking complexity. In-flight responses can be routed by correlation ID to the original client regardless of active status. | Immediate switching in Slice 2. Relay routes responses by correlation ID, so original client always gets its response. No data loss. Deferred switch is a future optimization. | Accepted |
+| 5 | PRD Assumption #3: MCP_CLIENT_NAME env var | Need to verify Claude Desktop/Code set this automatically or can be configured. | Use `MCP_CLIENT_NAME` env var with fallback chain: `MCP_CLIENT_NAME` -> heuristic detection (e.g., `TERM_PROGRAM`, `MCP_CALLER`) -> "MCP Client <short-uuid>". | Accepted |
+| 6 | NFR-3.2: Relay works on macOS and Windows | `child_process.fork` with `detached: true` works on both. Signal handling differs. | Test on macOS first. Windows support is best-effort for Slice 3. | Accepted |
 
 ## Architecture Decision Records
 
-### ADR-001: Build from scratch, not fork ClaudeTalkToFigma
-- **Status:** Accepted (Day 0)
-- **Rationale:** Cleaner architecture (no relay server), better Claude tool selection (declarative vs atomic), less refactoring debt
-- **Trade-off:** More initial work, but lower maintenance burden
+### ADR-001: Relay-in-Process for Slice 1, Detached for Slice 3
+- **Status**: Accepted
+- **Context**: The relay needs to run on port 3056. It can either run in-process with the first MCP server, or as a separate detached process from the start.
+- **Decision**: Slice 1 runs relay in-process. Validates the architecture with minimal complexity. Slice 3 graduates to detached process.
+- **Consequences**: In Slice 1, if the first MCP server exits, all other clients lose connection. Explicitly acceptable per PRD EC-1.2.
 
-### ADR-002: Embedded WebSocket in MCP server
-- **Status:** Accepted (Day 0)
-- **Rationale:** Eliminates relay server -- one fewer process boundary, simpler deployment
-- **Trade-off:** Tighter coupling between MCP and WS concerns
+### ADR-002: sendToPlugin API Preserved, Implementation Swapped
+- **Status**: Accepted
+- **Context**: All 10 tool files import `sendToPlugin` and `isPluginConnected` from `ws/server.ts`. This is the single integration point for 26 MCP tools.
+- **Decision**: `ws/server.ts` retains its exported API but the implementation changes. `startWsServer` becomes "start-or-connect-to-relay". `sendToPlugin` routes through the relay client connection. Zero tool file changes.
+- **Consequences**: All existing imports and tool code remain untouched. New relay logic lives in `ws/relay.ts`.
 
-### ADR-003: Node.js over Bun for MCP server
-- **Status:** Accepted (Day 0)
-- **Rationale:** Broader compatibility, easier distribution
-- **Trade-off:** Slightly slower startup (negligible for a long-running MCP server)
+### ADR-003: Plugin-vs-Client Differentiation via Handshake Message
+- **Status**: Accepted
+- **Context**: Relay must distinguish Figma plugin WS connections from MCP client connections. Plugin already sends `{ type: 'hello', ts: ... }` on connect (ui.html line 104).
+- **Decision**: MCP clients send `{ type: 'register', clientId, clientName }`. Plugin sends `{ type: 'hello' }`. Relay classifies by first message type.
+- **Consequences**: Clean separation. No URL/header sniffing. The plugin's existing handshake works without changes in Slice 1.
 
-### ADR-004: Zod for MCP schema validation
-- **Status:** Accepted (Phase 2)
-- **Rationale:** MCP SDK uses Zod natively. Single validation library.
-- **Trade-off:** None -- natural fit.
+### ADR-004: Immediate Switch, No Deferred Switch in Slice 2
+- **Status**: Accepted
+- **Context**: PRD EC-2.1 specifies deferring client switch during in-flight commands.
+- **Decision**: Immediate switching. Relay tracks correlation ID source, routes responses to originating client regardless of active status.
+- **Consequences**: Simpler implementation. Original client always gets its response. Edge case is handled correctly without complexity.
 
-### ADR-005: esbuild IIFE bundle for plugin
-- **Status:** Accepted (Phase 1)
-- **Rationale:** Figma plugins require single-file ES2015 compatible bundle. esbuild is fast and produces correct output.
-- **Trade-off:** No source maps in production plugin (acceptable for a plugin).
-
-### ADR-006: Image download on MCP server, not plugin
-- **Status:** Accepted (v2.0)
-- **Rationale:** Figma plugin sandbox has no fetch(). The plugin UI iframe CAN fetch but has CORS restrictions and adds complexity to the bridge. MCP server (Node.js) has unrestricted network access and can handle any URL/auth scheme.
-- **Trade-off:** Larger WS messages (base64 image bytes). May need to chunk for images > 1MB. Adds async fetch dependency to MCP tool handler (currently all tool handlers just relay to plugin).
-- **Alternative rejected:** UI iframe fetch -- adds CORS complexity, requires proxy for non-CORS URLs, fragments the download logic across two processes.
-
-### ADR-007: Style binding via ID properties, not inline style references
-- **Status:** Accepted (v2.0)
-- **Rationale:** Figma's native API uses `node.fillStyleId = styleId`, not style names. The existing `get_styles` tool already returns style IDs. Binding by ID is the fastest path. Name-based lookup adds overhead and ambiguity.
-- **Trade-off:** Claude must call `get_styles` first to discover IDs. This is acceptable -- it's one extra tool call per session, not per node.
-
-### ADR-008: Boolean operations as standalone tool, not build_scene node type
-- **Status:** Accepted (v2.0)
-- **Rationale:** Boolean operations require child nodes to already exist, then they get combined. This is fundamentally a post-hoc operation, not a declarative one. Same architectural problem as GROUP (see RC-5). Adding BOOLEAN_OPERATION to build_scene would require a reversed build order hack similar to COMPONENT_SET but more fragile.
-- **Trade-off:** Two-step workflow: build_scene to create shapes, then boolean_operation to combine them.
-- **Alternative rejected:** BOOLEAN_OPERATION in build_scene with reversed build.
-
-### ADR-009: Refactor handleModifyNode into shared core for batch reuse
-- **Status:** Accepted (v3.0)
-- **Rationale:** `handleModifyNode` is 130+ lines containing font loading, property application, style binding, text properties, component swap, AND commitUndo. For batch_modify, we need the core logic without commitUndo. Extracting `applyNodeModifications(nodeId, properties)` is cleaner than adding a `skipCommitUndo` boolean flag.
-- **Trade-off:** Two-function pattern. `handleModifyNode` calls `applyNodeModifications` + commitUndo. `handleBatchModify` calls `applyNodeModifications` N times + one commitUndo. Slight refactor risk but the function boundary is natural.
-- **Alternative rejected:** Boolean `skipCommitUndo` parameter -- boolean flags are a code smell for a reason.
-
-### ADR-010: Warning system as additive `warnings` field, not blocking validation
-- **Status:** Accepted (v3.0)
-- **Rationale:** Detecting silently-ignored properties must NOT prevent the operation from executing. Figma silently drops these properties -- it doesn't error. Our warnings should mirror that behavior: inform, don't block. Warnings are returned alongside results, not as errors.
-- **Trade-off:** The `errors` array already exists and serves dual duty (actual errors + warnings). Cleanest approach: add a separate `warnings: string[]` to the response. This is a slight breaking change in response shape but additive-only.
-- **Decision:** Use the existing `errors` array but prefix warning messages with `[warning]` for machine-parseable distinction. Avoids response shape change while remaining clear. Consumers can filter by prefix if needed.
-
----
+### ADR-005: New Relay Message Types in Shared Package
+- **Status**: Accepted
+- **Context**: Need new message types for relay protocol (register, client_list, set_active_client, activated, deactivated, relay_error). These are relay-internal and do not flow to the Figma plugin main thread.
+- **Decision**: Add relay message types to `packages/shared/src/messages.ts`. This keeps the single source of truth for all WS message types.
+- **Consequences**: Shared package grows slightly. Plugin main thread does not need to handle these types -- they are consumed by `ui.html` JavaScript and the relay.
 
 ## Technology Stack
 
-| Layer | Technology | Version | Purpose |
-|-------|-----------|---------|---------|
-| Language | TypeScript | ^5.9.3 | Type safety across all packages |
-| Runtime | Node.js | >= 18 | MCP server execution |
-| MCP SDK | @modelcontextprotocol/sdk | ^1.12.1 | MCP protocol implementation |
-| WebSocket | ws | ^8.18.0 | Server-plugin communication |
-| Validation | zod | ^3.24.2 | MCP tool input schemas |
-| Plugin types | @figma/plugin-typings | ^1.106.0 | Figma API type definitions |
-| Bundler | esbuild | ^0.25.0 | Plugin IIFE bundling |
-| Dev runner | tsx | ^4.21.0 | MCP server dev mode |
-| IDs | uuid | ^11.1.0 | Correlation IDs |
-| Testing | vitest | ^4.0.18 | Unit and integration tests |
-| Linting | eslint | ^10.x | Code quality |
-| Formatting | prettier | ^3.x | Code style consistency |
-
----
+| Layer | Choice | Version | Rationale |
+|-------|--------|---------|----------|
+| WS Server (relay) | `ws` | 8.18 | Already in use. Relay is just another WebSocketServer instance. |
+| WS Client (mcp-to-relay) | `ws` | 8.18 | MCP server becomes a WS client. Same library, no new dependency. |
+| UUID | `uuid` | 11.1 | Already in use. Used for clientId generation. |
+| Test | `vitest` | 4.x | Already in use. All new tests use vitest. |
+| Process mgmt (Slice 3) | `child_process` (Node built-in) | N/A | Fork with detached: true. No new dependency. |
 
 ## Phases
 
-### Phase 0: Completed -- Reconnaissance
-- Cloned and analyzed ClaudeTalkToFigma
-- Extracted patterns, property mappings, edge cases into REFERENCE.md
-- 1,081 lines of reference documentation
+### Phase 0: Completed (Baseline)
+FigmaFast has 26 MCP tools across 10 tool files, a direct WS connection architecture (`ws/server.ts` binds port 3056, plugin connects to it), a shared message protocol (`packages/shared/src/messages.ts`), and 74 tests (68 passing, 6 failing due to stale tool count assertions from `get_image_fill` addition). The codebase is clean, well-structured TypeScript.
 
-### Phase 1: Completed -- Project Scaffolding
-- Monorepo with npm workspaces (shared, mcp-server, figma-plugin)
-- TypeScript strict mode across all packages
-- Build tooling: tsc for libraries, esbuild IIFE for plugin
-- Shared types: SceneNode, WsMessage protocol, color utilities
-- Hello-world connectivity (ping/pong) -- manually tested
+**Key file inventory:**
+- `packages/mcp-server/src/ws/server.ts` -- WS server, `sendToPlugin`, `isPluginConnected`, `startWsServer` (128 lines)
+- `packages/mcp-server/src/index.ts` -- entry point, starts WS and MCP servers (54 lines)
+- `packages/figma-plugin/src/ui.html` -- plugin UI with WS client, reconnect logic (158 lines)
+- `packages/shared/src/messages.ts` -- all WS message types (98 lines)
+- 10 tool files in `packages/mcp-server/src/tools/` -- all import from `ws/server.ts`
 
-### Phase 2: Completed -- Scene Builder Engine
-- `build_scene` MCP tool -- full implementation
-- Recursive node builder with 12 node types (FRAME, TEXT, RECTANGLE, ELLIPSE, GROUP, COMPONENT, COMPONENT_SET, COMPONENT_INSTANCE, POLYGON, STAR, LINE, VECTOR)
-- Font preloading with fallback to Inter Regular
-- Auto-layout, fills, strokes, effects, corner radius, text properties
-- Undo batching, viewport scroll-to-view
-- 120s timeout for large scenes
+### Phase 1: WS Relay with Multi-Client Registration (Slice 1) -- Estimated: 40-55 iterations
 
-### Phase 3: Completed -- Read Tools & Atomic Edits
-- 7 read tools: get_document_info, get_node_info, get_selection, get_styles, get_local_components, get_library_components, export_node_as_image
-- 4 edit tools: modify_node, delete_nodes, move_node, clone_node
-- Node serializer for read responses (configurable depth)
-- Export with base64 encoding (custom implementation for Figma sandbox)
+1. Add relay message types to shared package
+2. Create `ws/relay.ts` -- the relay server (~250-300 lines)
+3. Refactor `ws/server.ts` -- detect-or-start relay, connect as client (~200 lines rewrite)
+4. Update `index.ts` entry point -- pass `MCP_CLIENT_NAME` env var
+5. Comprehensive unit and integration tests
 
-### Phase 4: SUPERSEDED by Phase 10
-- Originally: batch_modify, batch_text_replace (deferred per RC-1, RC-2)
-- batch_modify now justified by real-world data and moved to Phase 10
-- batch_text_replace remains deferred (still gold-plating)
+**Success criteria:**
+- Two MCP server processes can run simultaneously
+- First is auto-active, second gets clear rejection
+- Ping round-trip adds <5ms latency vs baseline
+- Plugin connects to relay identically to current direct connection
+- All existing 68 passing tests continue to pass
 
-### Phase 5: Completed -- Component System
-- COMPONENT and COMPONENT_SET creation in build_scene
-- ComponentSet uses reversed build order (children first, then combineAsVariants)
-- 3 lifecycle tools: convert_to_component, combine_as_variants, manage_component_properties
-- get_library_components via Figma REST API (requires FIGMA_API_TOKEN)
-- Local component instances via componentId
-- Property overrides via setProperties() with name prefix matching
-- Component swap via modify_node swapComponent
+### Phase 2: Plugin UI Client Picker (Slice 2) -- Estimated: 25-35 iterations
 
-### Phase 5.5: Completed -- Test & Quality Infrastructure
-- vitest installed and configured (42 tests, all passing)
-- Unit tests: colors (11), fonts (8), schemas (20), server integration (1), WS server (2)
-- ESLint + Prettier configured and passing
-- Schemas extracted to shared schemas.ts (eliminated duplication)
+1. Add `client_list` broadcast logic to relay
+2. Add `set_active_client` handling to relay
+3. Add `activated`/`deactivated` notifications
+4. Update `ui.html` -- client list UI, switch interaction
+5. Tests for new relay message flows and UI behavior
 
-### Phase 6: NEW -- Page Management
-- 3 new MCP tools: create_page, rename_page, set_current_page
-- 3 new plugin handlers
-- 3 new WS message types
-- Tests before implementation
+**Success criteria:**
+- Plugin UI shows connected clients with selection indicator
+- User can switch active client by clicking
+- Switch takes effect within 500ms
+- Commands route to newly active client immediately
 
-### Phase 7: NEW -- Style System
-- **Phase 7A:** Style binding -- add fillStyleId, textStyleId, effectStyleId to modify_node and build_scene
-- **Phase 7B:** Style creation -- 3 new MCP tools (create_paint_style, create_text_style, create_effect_style)
-- Tests before implementation
+### Phase 3: Resilient Relay (Slice 3) -- Estimated: 20-30 iterations
 
-### Phase 8: NEW -- Image Fills
-- `set_image_fill` MCP tool with server-side image download
-- IMAGE fill type functional in build_scene (currently placeholder gray)
-- New WS message shape for image data transfer
-- Tests before implementation
+1. Fork relay to detached child process
+2. PID file management (`os.tmpdir()/figma-fast-relay.pid`)
+3. Idle timeout auto-exit (60s default)
+4. Stale PID cleanup
+5. Tests for process lifecycle
 
-### Phase 9: NEW -- Boolean Operations
-- `boolean_operation` MCP tool (union, subtract, intersect, exclude)
-- NOT a build_scene node type (see ADR-008)
-- Tests before implementation
-
-### Phase 10: NEW -- Performance Optimizations
-- **Phase 10A:** Warning system for silently-ignored operations
-  - `detectIgnoredProperties(nodeType, properties)` -> `string[]` warnings
-  - Integrated into modify_node, batch_modify, and buildNode (build_scene)
-  - 4 initial detection rules: COMPONENT_SET children x/y, TEXT layout, non-TEXT text props, INSTANCE children/structure
-- **Phase 10B:** Refactor handleModifyNode into shared core
-  - Extract `applyNodeModifications(nodeId, properties)` -> `{nodeId, name, type, errors}`
-  - `handleModifyNode` = `applyNodeModifications` + `commitUndo`
-  - Required foundation for batch_modify
-- **Phase 10C:** `batch_modify` tool
-  - 1 new MCP tool, 1 new plugin handler
-  - Reuses existing `batch_modify` WS message type
-  - Loop over modifications calling `applyNodeModifications`, single `commitUndo`
-  - Response: `{ succeeded, failed, total, results: [...], warnings: [...] }`
-- **Phase 10D:** `batch_get_node_info` tool
-  - 1 new MCP tool, 1 new plugin handler, 1 new WS message type
-  - Loop + serialize, trivial implementation
-  - Response: `{ nodes: [...], errors: [...] }`
-- Tests before implementation (all sub-phases)
-
-### Phase 11: DEFERRED -- Variable Binding
-- Bind existing Figma variables to node properties
-- Only after Phases 6-10 are stable
-- Variable CREATION deferred to v4.0 (see RC-12)
-
----
+**Success criteria:**
+- Relay survives parent process exit
+- Other clients remain connected after parent exits
+- New MCP processes connect to existing detached relay
+- Relay auto-exits after 60s with no connections
+- Stale PID files are detected and cleaned up
 
 ## Risks & Mitigations
 
-| Risk | Severity | Likelihood | Mitigation |
-|------|----------|------------|------------|
-| Image download adds latency to build_scene | MEDIUM | HIGH | Parallel fetch + cache. Set reasonable timeout (30s per image). Document that large images slow builds. |
-| WS messages with base64 images may be very large | MEDIUM | MEDIUM | Warn if image > 2MB. Consider chunking in v3.0 if needed. |
-| Style IDs are file-local, not portable | LOW | HIGH | Document that styles must be created in the same file first. get_styles returns IDs for current file. |
-| Boolean operations on complex paths may be slow | LOW | LOW | 30s timeout should suffice. Document limitation for very complex vector paths. |
-| No CI/CD means build breaks go undetected | HIGH | MEDIUM | Add GitHub Actions before Phase 7 (high-impact phases). |
-| Plugin sandbox limits (no fetch) | MEDIUM | REALIZED | Handled: image fetch on MCP server, custom base64 in plugin. |
-| Figma API changes break plugin typings | MEDIUM | LOW | Pin @figma/plugin-typings version. |
-| Tool count growing (24 -> 26) may confuse Claude | LOW | MEDIUM | Clear tool descriptions with examples. Group related tools logically. Batch tools reduce overall tool calls. |
-| handleModifyNode refactor introduces regression | MEDIUM | LOW | Extract-and-delegate pattern. Existing tests cover modify_node behavior. All tests must pass after refactor before new features. |
-| Warning false positives annoy Claude | LOW | MEDIUM | Conservative initial rules (4 high-confidence cases only). Prefix with [warning] for distinction from errors. |
-| batch_modify with large arrays could timeout | LOW | LOW | Existing 30s timeout is generous for property assignments. No network IO in plugin handler. |
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| Relay adds latency | Low | Low | Localhost WS hop is <1ms. Benchmark in Phase 1 tests. Acceptance: <5ms added. |
+| sendToPlugin API contract breaks | Low | High | ADR-002: Preserve exact function signatures. Full regression suite. |
+| Race condition on relay startup | Medium | Medium | Retry with backoff (3x, 300ms+). Integration test covers this. |
+| Plugin WS reconnect loop | Low | Medium | Plugin already has reconnect with backoff. Relay accepts identically. |
+| 6 pre-existing failing tests | Medium | Low | Fix tool count assertions in a pre-work task before starting relay work. |
+| Vitest module-level singleton in ws/server.ts | Medium | Medium | Tests may share state. Use unique ports per test. Reset module state between tests. |
 
----
+## Out of Scope
 
-## Out of Scope (v2.0 Planning Horizon)
-
-- Figma plugin Community publishing
-- npx distribution (deferred per RC-3)
-- Multi-plugin concurrent connections
-- Variable CREATION (collections, modes) -- deferred to v3.0
-- Chunked scene building (deferred per RC-4)
-- batch_text_replace with regex (deferred per RC-2, still gold-plating)
-- BOOLEAN_OPERATION as a build_scene node type (see ADR-008)
-- REST API write operations (currently read-only via REST)
-- Automated e2e testing against live Figma
-- Grid styles (low demand, trivial to add later)
-- Undo/redo integration beyond commitUndo batching
+- Simultaneous multi-client command execution (one active client at a time)
+- Multi-file / multi-plugin-instance support
+- Remote/networked connections (localhost only)
+- Authentication or authorization
+- Command queuing for inactive clients
+- Auto-switching based on last command
+- Backward compatibility with old plugin versions
+- Deferred switching during in-flight commands (future optimization)

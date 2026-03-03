@@ -1835,7 +1835,7 @@
   }
 
   // src/main.ts
-  figma.showUI(__html__, { visible: true, width: 300, height: 200 });
+  figma.showUI(__html__, { visible: true, width: 300, height: 300 });
   function sendResult(id, data) {
     figma.ui.postMessage({ type: "result", id, success: true, data });
   }

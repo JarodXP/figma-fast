@@ -33,7 +33,7 @@ import {
 } from './handlers.js';
 
 // Show plugin UI
-figma.showUI(__html__, { visible: true, width: 300, height: 200 });
+figma.showUI(__html__, { visible: true, width: 300, height: 300 });
 
 /** Send a successful result back to the UI bridge */
 function sendResult(id: string, data: unknown): void {

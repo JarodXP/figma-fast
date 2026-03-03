@@ -96,3 +96,39 @@ export type PluginToServerMessage =
 
 /** Union of all WebSocket messages */
 export type WsMessage = ServerToPluginMessage | PluginToServerMessage;
+
+// ── Relay message types (Phase 1+) ──────────────────────────────────────────
+
+/** Information about a registered MCP client in the relay */
+export interface RelayClientInfo {
+  clientId: string;
+  clientName: string;
+  isActive: boolean;
+  connectedAt: number;
+}
+
+/** Messages MCP clients send TO the relay */
+export type ClientToRelayMessage =
+  | { type: 'register'; clientId: string; clientName: string }
+  | ServerToPluginMessage;
+
+/** Messages the relay sends TO MCP clients */
+export type RelayToClientMessage =
+  | { type: 'registered'; clientId: string; isActive: boolean }
+  | { type: 'activated' }
+  | { type: 'deactivated'; reason: string }
+  | { type: 'relay_error'; id: string; error: string }
+  | { type: 'plugin_connected' }
+  | { type: 'plugin_disconnected' }
+  | PluginToServerMessage;
+
+/** Messages the Figma plugin sends TO the relay */
+export type PluginToRelayMessage =
+  | { type: 'hello'; ts: number }
+  | { type: 'set_active_client'; clientId: string }
+  | PluginToServerMessage;
+
+/** Messages the relay sends TO the Figma plugin */
+export type RelayToPluginMessage =
+  | { type: 'client_list'; clients: RelayClientInfo[] }
+  | ServerToPluginMessage;
