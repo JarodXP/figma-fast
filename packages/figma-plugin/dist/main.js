@@ -497,6 +497,8 @@
         }
         if (spec.textAutoResize) {
           node.textAutoResize = spec.textAutoResize;
+        } else if (figma.editorType === "figjam") {
+          node.textAutoResize = spec.width !== void 0 ? "HEIGHT" : "WIDTH_AND_HEIGHT";
         }
         if (spec.characters !== void 0) {
           node.characters = spec.characters;
@@ -532,6 +534,11 @@
   }
   function applySizing(node, spec) {
     if (spec.layoutSizingHorizontal && "layoutSizingHorizontal" in node) {
+      if (node.type === "TEXT" && spec.layoutSizingHorizontal === "FILL") {
+        if (node.textAutoResize === "WIDTH_AND_HEIGHT") {
+          node.textAutoResize = "HEIGHT";
+        }
+      }
       node.layoutSizingHorizontal = spec.layoutSizingHorizontal;
     }
     if (spec.layoutSizingVertical && "layoutSizingVertical" in node) {
@@ -757,6 +764,28 @@
       } else {
         parent = figma.currentPage;
       }
+      if (figma.editorType === "figjam") {
+        let scanUnsupported2 = function(s) {
+          if (FIGJAM_UNSUPPORTED.has(s.type)) unsupported.add(s.type);
+          if (s.children) s.children.forEach(scanUnsupported2);
+        };
+        var scanUnsupported = scanUnsupported2;
+        const FIGJAM_UNSUPPORTED = /* @__PURE__ */ new Set(["COMPONENT", "COMPONENT_SET", "COMPONENT_INSTANCE"]);
+        const unsupported = /* @__PURE__ */ new Set();
+        scanUnsupported2(spec);
+        if (unsupported.size > 0) {
+          const types = Array.from(unsupported).join(", ");
+          return {
+            success: false,
+            rootNodeId: "",
+            nodeIdMap: {},
+            nodeCount: 0,
+            errors: [`FigJam does not support the following node types: ${types}. Use Figma design files for components.`],
+            fontSubstitutions: [],
+            durationMs: Date.now() - startTime
+          };
+        }
+      }
       const fontRefs = (0, import_shared.collectFonts)(spec);
       const failedFontRefs = yield preloadFonts(fontRefs);
       const failedFonts = new Set(failedFontRefs.map((f) => `${f.family}::${f.style}`));
@@ -799,6 +828,200 @@
         errors,
         fontSubstitutions,
         durationMs: Date.now() - startTime
+      };
+    });
+  }
+
+  // src/figjam-handlers.ts
+  function requireFigjam(toolName) {
+    if (figma.editorType !== "figjam") {
+      throw new Error(`${toolName} is only available in FigJam files.`);
+    }
+  }
+  function handleJamCreateSticky(text, color, x, y, width, height, parentId) {
+    return __async(this, null, function* () {
+      var _a;
+      requireFigjam("jam_create_sticky");
+      const sticky = figma.createSticky();
+      yield figma.loadFontAsync({ family: "Inter", style: "Medium" });
+      sticky.text.characters = text;
+      if (width !== void 0 || height !== void 0) {
+        sticky.resize(width != null ? width : sticky.width, height != null ? height : sticky.height);
+      }
+      if (x !== void 0) sticky.x = x;
+      if (y !== void 0) sticky.y = y;
+      if (color) {
+        const stickyColors = {
+          YELLOW: { r: 0.976, g: 0.898, b: 0.278 },
+          // #F9E547
+          ORANGE: { r: 1, g: 0.588, b: 0.251 },
+          // #FF9640
+          GREEN: { r: 0.208, g: 0.816, b: 0.451 },
+          // #35D073
+          LIGHT_GREEN: { r: 0.694, g: 0.918, b: 0.545 },
+          // #B1EA8B
+          RED: { r: 1, g: 0.322, b: 0.467 },
+          // #FF5277
+          BLUE: { r: 0, g: 0.69, b: 1 },
+          // #00B0FF
+          VIOLET: { r: 0.545, g: 0.275, b: 1 },
+          // #8B46FF
+          PINK: { r: 1, g: 0.388, b: 0.651 },
+          // #FF63A6
+          GRAY: { r: 0.6, g: 0.6, b: 0.6 }
+          // #999999
+        };
+        const rgb = stickyColors[color.toUpperCase()];
+        if (rgb) {
+          sticky.fills = [{ type: "SOLID", color: rgb }];
+        }
+      }
+      if (parentId) {
+        const parent = yield figma.getNodeByIdAsync(parentId);
+        if (parent && "children" in parent) {
+          parent.appendChild(sticky);
+        }
+      }
+      try {
+        (_a = figma.commitUndo) == null ? void 0 : _a.call(figma);
+      } catch (e) {
+      }
+      return { nodeId: sticky.id, name: sticky.name, type: sticky.type, width: sticky.width, height: sticky.height };
+    });
+  }
+  function handleJamCreateConnector(startNodeId, endNodeId, startPosition, endPosition, startStrokeCap, endStrokeCap) {
+    return __async(this, null, function* () {
+      var _a;
+      requireFigjam("jam_create_connector");
+      const connector = figma.createConnector();
+      if (startNodeId) {
+        const startNode = yield figma.getNodeByIdAsync(startNodeId);
+        if (!startNode) throw new Error(`Start node not found: ${startNodeId}`);
+        connector.connectorStart = { endpointNodeId: startNodeId, magnet: "AUTO" };
+      } else if (startPosition) {
+        connector.connectorStart = { position: startPosition };
+      }
+      if (endNodeId) {
+        const endNode = yield figma.getNodeByIdAsync(endNodeId);
+        if (!endNode) throw new Error(`End node not found: ${endNodeId}`);
+        connector.connectorEnd = { endpointNodeId: endNodeId, magnet: "AUTO" };
+      } else if (endPosition) {
+        connector.connectorEnd = { position: endPosition };
+      }
+      if (startStrokeCap) connector.connectorStartStrokeCap = startStrokeCap;
+      if (endStrokeCap) connector.connectorEndStrokeCap = endStrokeCap;
+      try {
+        (_a = figma.commitUndo) == null ? void 0 : _a.call(figma);
+      } catch (e) {
+      }
+      return { nodeId: connector.id, name: connector.name, type: connector.type };
+    });
+  }
+  function handleJamCreateShape(shapeType, text, x, y, parentId) {
+    return __async(this, null, function* () {
+      var _a;
+      requireFigjam("jam_create_shape");
+      const shape = figma.createShapeWithText();
+      shape.shapeType = shapeType;
+      if (text) {
+        yield figma.loadFontAsync({ family: "Inter", style: "Medium" });
+        shape.text.characters = text;
+      }
+      if (x !== void 0) shape.x = x;
+      if (y !== void 0) shape.y = y;
+      if (parentId) {
+        const parent = yield figma.getNodeByIdAsync(parentId);
+        if (parent && "children" in parent) parent.appendChild(shape);
+      }
+      try {
+        (_a = figma.commitUndo) == null ? void 0 : _a.call(figma);
+      } catch (e) {
+      }
+      return { nodeId: shape.id, name: shape.name, type: shape.type, shapeType: shape.shapeType };
+    });
+  }
+  function handleJamCreateCodeBlock(code, language, x, y, parentId) {
+    return __async(this, null, function* () {
+      var _a;
+      requireFigjam("jam_create_code_block");
+      const codeBlock = figma.createCodeBlock();
+      codeBlock.code = code;
+      if (language) codeBlock.codeLanguage = language;
+      if (x !== void 0) codeBlock.x = x;
+      if (y !== void 0) codeBlock.y = y;
+      if (parentId) {
+        const parent = yield figma.getNodeByIdAsync(parentId);
+        if (parent && "children" in parent) parent.appendChild(codeBlock);
+      }
+      try {
+        (_a = figma.commitUndo) == null ? void 0 : _a.call(figma);
+      } catch (e) {
+      }
+      return { nodeId: codeBlock.id, name: codeBlock.name, type: codeBlock.type };
+    });
+  }
+  function handleJamCreateTable(numRows, numCols, cellData, columnWidth, rowHeight, fontSize, x, y, parentId) {
+    return __async(this, null, function* () {
+      var _a, _b;
+      requireFigjam("jam_create_table");
+      const table = yield figma.createTable(numRows, numCols);
+      if (x !== void 0) table.x = x;
+      if (y !== void 0) table.y = y;
+      figma.currentPage.appendChild(table);
+      if (parentId) {
+        const parent = yield figma.getNodeByIdAsync(parentId);
+        if (parent && "children" in parent) parent.appendChild(table);
+      }
+      yield figma.loadFontAsync({ family: "Inter", style: "Regular" });
+      yield figma.loadFontAsync({ family: "Inter", style: "Medium" });
+      if (columnWidth !== void 0) {
+        for (let c = 0; c < numCols; c++) {
+          table.resizeColumn(c, columnWidth);
+        }
+      }
+      if (rowHeight !== void 0) {
+        for (let r = 0; r < numRows; r++) {
+          table.resizeRow(r, rowHeight);
+        }
+      }
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          try {
+            const cell = table.cellAt(r, c);
+            if (!(cell == null ? void 0 : cell.text)) continue;
+            const txt = cell.text;
+            const content = (_a = cellData == null ? void 0 : cellData[r]) == null ? void 0 : _a[c];
+            if (content !== void 0) {
+              txt.characters = content;
+            } else if (fontSize !== void 0 && txt.characters.length === 0) {
+              txt.characters = " ";
+            }
+            if (fontSize !== void 0 && txt.characters.length > 0) {
+              txt.setRangeFontSize(0, txt.characters.length, fontSize);
+              if (content === void 0 && txt.characters === " ") txt.characters = "";
+            }
+          } catch (err) {
+            console.error(`jam_create_table cell[${r}][${c}] error:`, err);
+          }
+        }
+      }
+      try {
+        (_b = figma.commitUndo) == null ? void 0 : _b.call(figma);
+      } catch (e) {
+      }
+      return { nodeId: table.id, name: table.name, type: table.type, numRows, numColumns: numCols };
+    });
+  }
+  function handleJamGetTimer() {
+    return __async(this, null, function* () {
+      requireFigjam("jam_get_timer");
+      const timer = figma.timer;
+      if (!timer) return { status: "unavailable" };
+      return {
+        remaining: timer.remaining,
+        totalDuration: timer.totalDuration,
+        isRunning: timer.isRunning,
+        isPaused: timer.isPaused
       };
     });
   }
@@ -973,6 +1196,33 @@
         result.mainComponentKey = mainComp.key;
       }
     }
+    if (node.type === "STICKY") {
+      const sticky = node;
+      if (sticky.text) result.text = sticky.text.characters;
+      result.authorVisible = sticky.authorVisible;
+    }
+    if (node.type === "SHAPE_WITH_TEXT") {
+      const shape = node;
+      result.shapeType = shape.shapeType;
+      if (shape.text) result.text = shape.text.characters;
+    }
+    if (node.type === "CONNECTOR") {
+      const conn = node;
+      result.connectorStart = conn.connectorStart;
+      result.connectorEnd = conn.connectorEnd;
+      result.connectorStartStrokeCap = conn.connectorStartStrokeCap;
+      result.connectorEndStrokeCap = conn.connectorEndStrokeCap;
+    }
+    if (node.type === "CODE_BLOCK") {
+      const cb = node;
+      result.code = cb.code;
+      result.codeLanguage = cb.codeLanguage;
+    }
+    if (node.type === "TABLE") {
+      const table = node;
+      result.numRows = table.numRows;
+      result.numColumns = table.numColumns;
+    }
     if ("children" in node) {
       const parent = node;
       if (depth > 0) {
@@ -1016,6 +1266,11 @@
     }
     return new Uint8Array(bytes);
   }
+  function requireFigmaDesign(toolName) {
+    if (figma.editorType === "figjam") {
+      throw new Error(`Not supported in FigJam: ${toolName} is only available in Figma design files.`);
+    }
+  }
   function handleGetDocumentInfo() {
     return __async(this, null, function* () {
       const pages = figma.root.children.map((page) => ({
@@ -1031,6 +1286,7 @@
       }));
       return {
         name: figma.root.name,
+        editorType: figma.editorType,
         currentPageId: currentPage.id,
         currentPageName: currentPage.name,
         pages,
@@ -1119,6 +1375,7 @@
   }
   function handleGetLocalComponents() {
     return __async(this, null, function* () {
+      requireFigmaDesign("get_local_components");
       const components = figma.root.findAllWithCriteria({ types: ["COMPONENT"] });
       return {
         count: components.length,
@@ -1363,6 +1620,7 @@
   }
   function handleConvertToComponent(nodeId) {
     return __async(this, null, function* () {
+      requireFigmaDesign("convert_to_component");
       const node = yield figma.getNodeByIdAsync(nodeId);
       if (!node) {
         throw new Error(`Node not found: ${nodeId}`);
@@ -1438,6 +1696,7 @@
   }
   function handleCombineAsVariants(nodeIds, name) {
     return __async(this, null, function* () {
+      requireFigmaDesign("combine_as_variants");
       const components = [];
       for (const nodeId of nodeIds) {
         const node = yield figma.getNodeByIdAsync(nodeId);
@@ -1467,6 +1726,7 @@
   }
   function handleManageComponentProperties(componentId, action, properties) {
     return __async(this, null, function* () {
+      requireFigmaDesign("manage_component_properties");
       const node = yield figma.getNodeByIdAsync(componentId);
       if (!node) {
         throw new Error(`Node not found: ${componentId}`);
@@ -1516,6 +1776,7 @@
   }
   function handleBooleanOperation(operation, nodeIds) {
     return __async(this, null, function* () {
+      requireFigmaDesign("boolean_operation");
       if (nodeIds.length < 2) {
         throw new Error(`Boolean operation requires at least 2 nodes, got ${nodeIds.length}`);
       }
@@ -1632,6 +1893,7 @@
   function handleCreatePaintStyle(name, fills) {
     return __async(this, null, function* () {
       var _a, _b, _c, _d;
+      requireFigmaDesign("create_paint_style");
       const style = figma.createPaintStyle();
       style.name = name;
       const errors = [];
@@ -1669,6 +1931,7 @@
   function handleCreateTextStyle(name, props) {
     return __async(this, null, function* () {
       var _a;
+      requireFigmaDesign("create_text_style");
       const style = figma.createTextStyle();
       style.name = name;
       const family = (_a = props.fontFamily) != null ? _a : "Inter";
@@ -1699,6 +1962,7 @@
   }
   function handleCreateEffectStyle(name, effects) {
     return __async(this, null, function* () {
+      requireFigmaDesign("create_effect_style");
       const style = figma.createEffectStyle();
       style.name = name;
       const figmaEffects = effects.map((effect) => {
@@ -1728,6 +1992,7 @@
   }
   function handleCreatePage(name) {
     return __async(this, null, function* () {
+      requireFigmaDesign("create_page");
       const page = figma.createPage();
       page.name = name;
       return { id: page.id, name: page.name };
@@ -1963,6 +2228,62 @@
         break;
       case "batch_get_node_info":
         handleBatchGetNodeInfo(msg.nodeIds, msg.depth).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      // --- FigJam Tools -------------------------------------------
+      case "jam_create_sticky":
+        handleJamCreateSticky(
+          msg.text,
+          msg.color,
+          msg.x,
+          msg.y,
+          msg.width,
+          msg.height,
+          msg.parentId
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "jam_create_connector":
+        handleJamCreateConnector(
+          msg.startNodeId,
+          msg.endNodeId,
+          msg.startPosition,
+          msg.endPosition,
+          msg.startStrokeCap,
+          msg.endStrokeCap
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "jam_create_shape":
+        handleJamCreateShape(
+          msg.shapeType,
+          msg.text,
+          msg.x,
+          msg.y,
+          msg.parentId
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "jam_create_code_block":
+        handleJamCreateCodeBlock(
+          msg.code,
+          msg.language,
+          msg.x,
+          msg.y,
+          msg.parentId
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "jam_create_table":
+        handleJamCreateTable(
+          msg.numRows,
+          msg.numCols,
+          msg.cellData,
+          msg.columnWidth,
+          msg.rowHeight,
+          msg.fontSize,
+          msg.x,
+          msg.y,
+          msg.parentId
+        ).then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
+        break;
+      case "jam_get_timer":
+        handleJamGetTimer().then((data) => sendResult(msg.id, data)).catch((err) => sendError(msg.id, err));
         break;
       default:
         console.log(`[FigmaFast] Unknown message type: ${msg.type}`);

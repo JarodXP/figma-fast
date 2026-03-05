@@ -238,4 +238,48 @@ const schemas_js_1 = require("../schemas.js");
         (0, vitest_1.expect)(result.success).toBe(true);
     });
 });
+(0, vitest_1.describe)('FigJam schemas', () => {
+    // TEST-FJ-002: JamStickyColorSchema
+    (0, vitest_1.it)('JamStickyColorSchema accepts valid color YELLOW', () => {
+        const result = schemas_js_1.JamStickyColorSchema.safeParse('YELLOW');
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('JamStickyColorSchema rejects invalid color PURPLE', () => {
+        const result = schemas_js_1.JamStickyColorSchema.safeParse('PURPLE');
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    // TEST-FJ-003: JamShapeTypeSchema
+    (0, vitest_1.it)('JamShapeTypeSchema accepts valid shape DIAMOND', () => {
+        const result = schemas_js_1.JamShapeTypeSchema.safeParse('DIAMOND');
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('JamShapeTypeSchema rejects invalid shape HEXAGON', () => {
+        const result = schemas_js_1.JamShapeTypeSchema.safeParse('HEXAGON');
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('JamShapeTypeSchema rejects missing value (required field)', () => {
+        const result = schemas_js_1.JamShapeTypeSchema.safeParse(undefined);
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('JamConnectorStrokeCapSchema accepts valid cap ARROW_LINES', () => {
+        const result = schemas_js_1.JamConnectorStrokeCapSchema.safeParse('ARROW_LINES');
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('JamConnectorStrokeCapSchema accepts undefined (optional)', () => {
+        const result = schemas_js_1.JamConnectorStrokeCapSchema.safeParse(undefined);
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('JamCodeLanguageSchema accepts valid language JAVASCRIPT', () => {
+        const result = schemas_js_1.JamCodeLanguageSchema.safeParse('JAVASCRIPT');
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+    (0, vitest_1.it)('JamCodeLanguageSchema rejects invalid language INVALID', () => {
+        const result = schemas_js_1.JamCodeLanguageSchema.safeParse('INVALID');
+        (0, vitest_1.expect)(result.success).toBe(false);
+    });
+    (0, vitest_1.it)('JamCodeLanguageSchema accepts undefined (optional)', () => {
+        const result = schemas_js_1.JamCodeLanguageSchema.safeParse(undefined);
+        (0, vitest_1.expect)(result.success).toBe(true);
+    });
+});
 //# sourceMappingURL=schemas.test.js.map

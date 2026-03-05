@@ -46,6 +46,22 @@ export interface SerializedNode {
   componentPropertyDefinitions?: Record<string, unknown>;
   mainComponentId?: string;
   mainComponentKey?: string;
+  // FigJam: Sticky
+  text?: string;
+  authorVisible?: boolean;
+  // FigJam: ShapeWithText
+  shapeType?: string;
+  // FigJam: Connector
+  connectorStart?: unknown;
+  connectorEnd?: unknown;
+  connectorStartStrokeCap?: string;
+  connectorEndStrokeCap?: string;
+  // FigJam: CodeBlock
+  code?: string;
+  codeLanguage?: string;
+  // FigJam: Table
+  numRows?: number;
+  numColumns?: number;
   // Children
   children?: SerializedNode[];
 }
@@ -252,6 +268,35 @@ export function serializeNode(node: BaseNode, depth: number): SerializedNode {
       result.mainComponentId = mainComp.id;
       result.mainComponentKey = mainComp.key;
     }
+  }
+
+  // FigJam node types
+  if (node.type === 'STICKY') {
+    const sticky = node as any;
+    if (sticky.text) result.text = sticky.text.characters;
+    result.authorVisible = sticky.authorVisible;
+  }
+  if (node.type === 'SHAPE_WITH_TEXT') {
+    const shape = node as any;
+    result.shapeType = shape.shapeType;
+    if (shape.text) result.text = shape.text.characters;
+  }
+  if (node.type === 'CONNECTOR') {
+    const conn = node as any;
+    result.connectorStart = conn.connectorStart;
+    result.connectorEnd = conn.connectorEnd;
+    result.connectorStartStrokeCap = conn.connectorStartStrokeCap;
+    result.connectorEndStrokeCap = conn.connectorEndStrokeCap;
+  }
+  if (node.type === 'CODE_BLOCK') {
+    const cb = node as any;
+    result.code = cb.code;
+    result.codeLanguage = cb.codeLanguage;
+  }
+  if (node.type === 'TABLE') {
+    const table = node as any;
+    result.numRows = table.numRows;
+    result.numColumns = table.numColumns;
   }
 
   // Children

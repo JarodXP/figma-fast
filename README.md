@@ -16,7 +16,7 @@ Traditional Figma MCP tools create nodes one at a time. A simple card with a tit
 
 FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates everything in one call — frames, text, shapes, components, component sets with variants, images from URL, and style bindings. A full dashboard in a single request. Combined with read tools for inspecting the canvas, edit tools for surgical changes, style/page/component management tools, and boolean operations for custom shapes, it gives AI assistants a complete Figma design system workflow.
 
-### Tool Inventory (27 tools)
+### Tool Inventory (32 tools)
 
 #### Scene Building
 
@@ -78,6 +78,17 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 |------|---------|
 | `set_image_fill` | Fill a node with an image from a URL |
 | `boolean_operation` | Combine shapes via UNION, SUBTRACT, INTERSECT, or EXCLUDE |
+
+#### FigJam
+
+| Tool | Purpose |
+|------|---------|
+| `jam_create_sticky` | Create a sticky note with text and color (`YELLOW`, `ORANGE`, `GREEN`, `LIGHT_GREEN`, `RED`, `BLUE`, `VIOLET`, `PINK`, `GRAY`) |
+| `jam_create_connector` | Create a connector between two nodes or canvas positions, with configurable stroke caps |
+| `jam_create_shape` | Create a shape with text (e.g., `SQUARE`, `ELLIPSE`, `DIAMOND`, `TRIANGLE_UP`, `PARALLELOGRAM_RIGHT`) |
+| `jam_create_code_block` | Create a code block with syntax highlighting |
+| `jam_create_table` | Create a table with configurable rows, columns, cell text, and font size |
+| `jam_get_timer` | Read the FigJam timer state (remaining time, running/paused) |
 
 #### Utility
 
@@ -256,6 +267,27 @@ Show me what images are embedded in node 123:456.
 
 Claude calls `get_node_info` → sees fills with `type: "IMAGE"` and `imageHash`, then calls `get_image_fill` with `fillIndex` to view each one.
 
+### FigJam boards
+
+FigmaFast works in both Figma Design files and FigJam boards. When the plugin is running in a FigJam file, the `jam_*` tools become available:
+
+```
+Create a brainstorming board with three yellow stickies titled
+"Idea 1", "Idea 2", "Idea 3" arranged horizontally, and connect
+them with arrows.
+```
+
+Claude calls `jam_create_sticky` for each note (with `color: "YELLOW"`), then `jam_create_connector` to link them.
+
+```
+Create a 3×4 table with headers "Feature", "Priority", "Status"
+and fill in the first row with "Auth", "High", "Done".
+```
+
+Claude calls `jam_create_table` with `cellData` to create and populate the table in one call.
+
+`build_scene` also works in FigJam for creating frames and text layouts — useful for building structured templates, journey maps, or wireframes directly on a FigJam board.
+
 ### Export for review
 
 ```
@@ -290,6 +322,7 @@ figma-fast/
 │   │       │   ├── page-tools.ts     # 3 page management tools
 │   │       │   ├── image-tools.ts    # Image fill from URL
 │   │       │   ├── boolean-tools.ts  # Boolean shape operations
+│   │       │   ├── figjam-tools.ts  # 6 FigJam-specific tools
 │   │       │   └── ping.ts          # Health check
 │   │       └── ws/
 │   │           ├── server.ts    # WS client: start-or-connect relay logic
@@ -299,7 +332,8 @@ figma-fast/
 │       └── src/
 │           ├── main.ts          # Plugin main thread
 │           ├── ui.html          # UI iframe (WS client)
-│           ├── handlers.ts      # All plugin-side handlers
+│           ├── handlers.ts      # Figma Design plugin handlers
+│           ├── figjam-handlers.ts # FigJam-specific handlers
 │           ├── serialize-node.ts
 │           └── scene-builder/   # Recursive scene builder
 │               ├── index.ts

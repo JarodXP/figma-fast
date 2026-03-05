@@ -6,6 +6,10 @@ import {
   EffectSchema,
   ModifyPropertiesSchema,
   BatchModificationSchema,
+  JamStickyColorSchema,
+  JamShapeTypeSchema,
+  JamConnectorStrokeCapSchema,
+  JamCodeLanguageSchema,
 } from '../schemas.js';
 
 describe('SceneNodeSchema', () => {
@@ -269,6 +273,60 @@ describe('Phase 7A style binding schema', () => {
       textStyleId: 'S:def,2:2',
       effectStyleId: 'S:ghi,3:3',
     });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('FigJam schemas', () => {
+  // TEST-FJ-002: JamStickyColorSchema
+  it('JamStickyColorSchema accepts valid color YELLOW', () => {
+    const result = JamStickyColorSchema.safeParse('YELLOW');
+    expect(result.success).toBe(true);
+  });
+
+  it('JamStickyColorSchema rejects invalid color PURPLE', () => {
+    const result = JamStickyColorSchema.safeParse('PURPLE');
+    expect(result.success).toBe(false);
+  });
+
+  // TEST-FJ-003: JamShapeTypeSchema
+  it('JamShapeTypeSchema accepts valid shape DIAMOND', () => {
+    const result = JamShapeTypeSchema.safeParse('DIAMOND');
+    expect(result.success).toBe(true);
+  });
+
+  it('JamShapeTypeSchema rejects invalid shape HEXAGON', () => {
+    const result = JamShapeTypeSchema.safeParse('HEXAGON');
+    expect(result.success).toBe(false);
+  });
+
+  it('JamShapeTypeSchema rejects missing value (required field)', () => {
+    const result = JamShapeTypeSchema.safeParse(undefined);
+    expect(result.success).toBe(false);
+  });
+
+  it('JamConnectorStrokeCapSchema accepts valid cap ARROW_LINES', () => {
+    const result = JamConnectorStrokeCapSchema.safeParse('ARROW_LINES');
+    expect(result.success).toBe(true);
+  });
+
+  it('JamConnectorStrokeCapSchema accepts undefined (optional)', () => {
+    const result = JamConnectorStrokeCapSchema.safeParse(undefined);
+    expect(result.success).toBe(true);
+  });
+
+  it('JamCodeLanguageSchema accepts valid language JAVASCRIPT', () => {
+    const result = JamCodeLanguageSchema.safeParse('JAVASCRIPT');
+    expect(result.success).toBe(true);
+  });
+
+  it('JamCodeLanguageSchema rejects invalid language INVALID', () => {
+    const result = JamCodeLanguageSchema.safeParse('INVALID');
+    expect(result.success).toBe(false);
+  });
+
+  it('JamCodeLanguageSchema accepts undefined (optional)', () => {
+    const result = JamCodeLanguageSchema.safeParse(undefined);
     expect(result.success).toBe(true);
   });
 });

@@ -16,6 +16,7 @@ import { registerStyleTools } from './tools/style-tools.js';
 import { registerImageTools } from './tools/image-tools.js';
 import { registerBooleanTools } from './tools/boolean-tools.js';
 import { registerBatchTools } from './tools/batch-tools.js';
+import { registerFigjamTools } from './tools/figjam-tools.js';
 
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 
@@ -36,6 +37,7 @@ registerStyleTools(server);
 registerImageTools(server);
 registerBooleanTools(server);
 registerBatchTools(server);
+registerFigjamTools(server);
 
 // Start embedded WebSocket server (connect to or start relay)
 const CLIENT_NAME = process.env.MCP_CLIENT_NAME || undefined;

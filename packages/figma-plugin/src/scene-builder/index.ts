@@ -58,6 +58,29 @@ export async function buildScene(
     parent = figma.currentPage;
   }
 
+  // 1.5. FIGJAM CHECK -- reject unsupported node types
+  if ((figma as any).editorType === 'figjam') {
+    const FIGJAM_UNSUPPORTED = new Set(['COMPONENT', 'COMPONENT_SET', 'COMPONENT_INSTANCE']);
+    const unsupported = new Set<string>();
+    function scanUnsupported(s: SceneSpec) {
+      if (FIGJAM_UNSUPPORTED.has(s.type)) unsupported.add(s.type);
+      if (s.children) s.children.forEach(scanUnsupported);
+    }
+    scanUnsupported(spec);
+    if (unsupported.size > 0) {
+      const types = Array.from(unsupported).join(', ');
+      return {
+        success: false,
+        rootNodeId: '',
+        nodeIdMap: {},
+        nodeCount: 0,
+        errors: [`FigJam does not support the following node types: ${types}. Use Figma design files for components.`],
+        fontSubstitutions: [],
+        durationMs: Date.now() - startTime,
+      };
+    }
+  }
+
   // 2. COLLECT FONTS from entire spec tree
   const fontRefs = collectFonts(spec);
 

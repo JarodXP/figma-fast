@@ -4,7 +4,7 @@
  * Extracted from build-scene.ts and edit-tools.ts to eliminate duplication.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BatchModificationSchema = exports.ModifyPropertiesSchema = exports.SceneNodeSchema = exports.LineHeightSchema = exports.EffectSchema = exports.StrokeSchema = exports.FillSchema = void 0;
+exports.BatchModificationSchema = exports.JamCodeLanguageSchema = exports.JamConnectorStrokeCapSchema = exports.JamShapeTypeSchema = exports.JamStickyColorSchema = exports.ModifyPropertiesSchema = exports.SceneNodeSchema = exports.LineHeightSchema = exports.EffectSchema = exports.StrokeSchema = exports.FillSchema = void 0;
 const zod_1 = require("zod");
 // ─── Sub-Schemas ────────────────────────────────────────────────
 exports.FillSchema = zod_1.z.object({
@@ -178,6 +178,25 @@ exports.ModifyPropertiesSchema = zod_1.z
         .describe('Figma effect style ID to bind (from get_styles). Overrides effects array if set.'),
 })
     .describe('Properties to update on the node');
+// ─── FigJam Schemas ──────────────────────────────────────────────
+exports.JamStickyColorSchema = zod_1.z.enum([
+    'GRAY', 'YELLOW', 'ORANGE', 'GREEN', 'BLUE', 'VIOLET', 'PINK', 'RED',
+    'LIGHT_GRAY', 'TEAL', 'LIGHT_GREEN'
+]).optional().describe('Sticky note background color (default: YELLOW)');
+exports.JamShapeTypeSchema = zod_1.z.enum([
+    'SQUARE', 'ELLIPSE', 'DIAMOND', 'TRIANGLE_UP', 'TRIANGLE_DOWN',
+    'PARALLELOGRAM_RIGHT', 'PARALLELOGRAM_LEFT',
+    'ENG_DATABASE', 'ENG_QUEUE', 'ENG_FILE', 'ENG_FOLDER',
+]).describe('FigJam shape type');
+exports.JamConnectorStrokeCapSchema = zod_1.z.enum([
+    'NONE', 'ARROW_LINES', 'ARROW_EQUILATERAL', 'TRIANGLE_FILLED',
+    'DIAMOND_FILLED', 'CIRCLE_FILLED',
+]).optional().describe('Connector endpoint stroke cap style');
+exports.JamCodeLanguageSchema = zod_1.z.enum([
+    'PLAIN', 'BASH', 'CPP', 'CSS', 'GO', 'GRAPHQL', 'HTML', 'JAVA',
+    'JAVASCRIPT', 'JSON', 'KOTLIN', 'PYTHON', 'RUBY', 'RUST', 'SQL',
+    'SWIFT', 'TYPESCRIPT', 'XML', 'YAML',
+]).optional().describe('Code block language (default: PLAIN)');
 // ─── Batch Schema ────────────────────────────────────────────────
 /** A single item in a batch_modify modifications array */
 exports.BatchModificationSchema = zod_1.z.object({

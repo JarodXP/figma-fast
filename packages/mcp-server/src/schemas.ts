@@ -200,6 +200,30 @@ export const ModifyPropertiesSchema = z
   })
   .describe('Properties to update on the node');
 
+// ─── FigJam Schemas ──────────────────────────────────────────────
+
+export const JamStickyColorSchema = z.enum([
+  'GRAY', 'YELLOW', 'ORANGE', 'GREEN', 'BLUE', 'VIOLET', 'PINK', 'RED',
+  'LIGHT_GRAY', 'TEAL', 'LIGHT_GREEN'
+]).optional().describe('Sticky note background color (default: YELLOW)');
+
+export const JamShapeTypeSchema = z.enum([
+  'SQUARE', 'ELLIPSE', 'DIAMOND', 'TRIANGLE_UP', 'TRIANGLE_DOWN',
+  'PARALLELOGRAM_RIGHT', 'PARALLELOGRAM_LEFT',
+  'ENG_DATABASE', 'ENG_QUEUE', 'ENG_FILE', 'ENG_FOLDER',
+]).describe('FigJam shape type');
+
+export const JamConnectorStrokeCapSchema = z.enum([
+  'NONE', 'ARROW_LINES', 'ARROW_EQUILATERAL', 'TRIANGLE_FILLED',
+  'DIAMOND_FILLED', 'CIRCLE_FILLED',
+]).optional().describe('Connector endpoint stroke cap style');
+
+export const JamCodeLanguageSchema = z.enum([
+  'PLAIN', 'BASH', 'CPP', 'CSS', 'GO', 'GRAPHQL', 'HTML', 'JAVA',
+  'JAVASCRIPT', 'JSON', 'KOTLIN', 'PYTHON', 'RUBY', 'RUST', 'SQL',
+  'SWIFT', 'TYPESCRIPT', 'XML', 'YAML',
+]).optional().describe('Code block language (default: PLAIN)');
+
 // ─── Batch Schema ────────────────────────────────────────────────
 
 /** A single item in a batch_modify modifications array */

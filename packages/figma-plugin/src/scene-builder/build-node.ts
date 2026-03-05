@@ -294,9 +294,14 @@ export async function applyTextProperties(
       node.fontSize = spec.fontSize;
     }
 
-    // Set textAutoResize BEFORE characters to avoid layout thrashing
+    // Set textAutoResize BEFORE characters to avoid layout thrashing.
+    // In FigJam, default to WIDTH_AND_HEIGHT when not explicitly set — without this,
+    // text nodes collapse to their initial tiny size and render characters vertically.
+    // Exception: if an explicit width is set, use HEIGHT to preserve the fixed width.
     if (spec.textAutoResize) {
       node.textAutoResize = spec.textAutoResize;
+    } else if ((figma as any).editorType === 'figjam') {
+      node.textAutoResize = spec.width !== undefined ? 'HEIGHT' : 'WIDTH_AND_HEIGHT';
     }
 
     if (spec.characters !== undefined) {
@@ -339,6 +344,13 @@ export async function applyTextProperties(
 export function applySizing(node: SceneNode, spec: SceneSpec): void {
   // layoutSizing only works on children of auto-layout frames
   if (spec.layoutSizingHorizontal && 'layoutSizingHorizontal' in node) {
+    // TEXT nodes with FILL horizontal sizing need textAutoResize set to HEIGHT
+    // (not WIDTH_AND_HEIGHT), otherwise Figma collapses width to 0.
+    if (node.type === 'TEXT' && spec.layoutSizingHorizontal === 'FILL') {
+      if (node.textAutoResize === 'WIDTH_AND_HEIGHT') {
+        node.textAutoResize = 'HEIGHT';
+      }
+    }
     (node as FrameNode).layoutSizingHorizontal = spec.layoutSizingHorizontal;
   }
   if (spec.layoutSizingVertical && 'layoutSizingVertical' in node) {

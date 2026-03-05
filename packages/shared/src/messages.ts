@@ -87,7 +87,14 @@ export type ServerToPluginMessage =
       nodeIds: string[];
     }
   // Phase 10D: Batch Read
-  | { type: 'batch_get_node_info'; id: string; nodeIds: string[]; depth?: number };
+  | { type: 'batch_get_node_info'; id: string; nodeIds: string[]; depth?: number }
+  // FigJam Tools
+  | { type: 'jam_create_sticky'; id: string; text: string; color?: string; x?: number; y?: number; width?: number; height?: number; parentId?: string }
+  | { type: 'jam_create_connector'; id: string; startNodeId?: string; endNodeId?: string; startPosition?: { x: number; y: number }; endPosition?: { x: number; y: number }; startStrokeCap?: string; endStrokeCap?: string }
+  | { type: 'jam_create_shape'; id: string; shapeType: string; text?: string; x?: number; y?: number; parentId?: string }
+  | { type: 'jam_create_code_block'; id: string; code: string; language?: string; x?: number; y?: number; parentId?: string }
+  | { type: 'jam_create_table'; id: string; numRows: number; numCols: number; cellData?: string[][]; columnWidth?: number; rowHeight?: number; fontSize?: number; x?: number; y?: number; parentId?: string }
+  | { type: 'jam_get_timer'; id: string };
 
 /** Messages sent from Figma plugin to MCP server */
 export type PluginToServerMessage =

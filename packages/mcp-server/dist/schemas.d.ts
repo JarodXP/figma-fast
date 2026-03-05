@@ -305,10 +305,10 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
         } | undefined;
         spread?: number | undefined;
     }[] | undefined;
-    opacity?: number | undefined;
-    visible?: boolean | undefined;
     width?: number | undefined;
     height?: number | undefined;
+    opacity?: number | undefined;
+    visible?: boolean | undefined;
     strokes?: {
         color: string;
         weight: number;
@@ -374,10 +374,10 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
         } | undefined;
         spread?: number | undefined;
     }[] | undefined;
-    opacity?: number | undefined;
-    visible?: boolean | undefined;
     width?: number | undefined;
     height?: number | undefined;
+    opacity?: number | undefined;
+    visible?: boolean | undefined;
     strokes?: {
         color: string;
         weight: number;
@@ -405,6 +405,10 @@ export declare const ModifyPropertiesSchema: z.ZodObject<{
     locked?: boolean | undefined;
     swapComponent?: string | undefined;
 }>;
+export declare const JamStickyColorSchema: z.ZodOptional<z.ZodEnum<["GRAY", "YELLOW", "ORANGE", "GREEN", "BLUE", "VIOLET", "PINK", "RED", "LIGHT_GRAY", "TEAL", "LIGHT_GREEN"]>>;
+export declare const JamShapeTypeSchema: z.ZodEnum<["SQUARE", "ELLIPSE", "DIAMOND", "TRIANGLE_UP", "TRIANGLE_DOWN", "PARALLELOGRAM_RIGHT", "PARALLELOGRAM_LEFT", "ENG_DATABASE", "ENG_QUEUE", "ENG_FILE", "ENG_FOLDER"]>;
+export declare const JamConnectorStrokeCapSchema: z.ZodOptional<z.ZodEnum<["NONE", "ARROW_LINES", "ARROW_EQUILATERAL", "TRIANGLE_FILLED", "DIAMOND_FILLED", "CIRCLE_FILLED"]>>;
+export declare const JamCodeLanguageSchema: z.ZodOptional<z.ZodEnum<["PLAIN", "BASH", "CPP", "CSS", "GO", "GRAPHQL", "HTML", "JAVA", "JAVASCRIPT", "JSON", "KOTLIN", "PYTHON", "RUBY", "RUST", "SQL", "SWIFT", "TYPESCRIPT", "XML", "YAML"]>>;
 /** A single item in a batch_modify modifications array */
 export declare const BatchModificationSchema: z.ZodObject<{
     nodeId: z.ZodString;
@@ -594,10 +598,10 @@ export declare const BatchModificationSchema: z.ZodObject<{
             } | undefined;
             spread?: number | undefined;
         }[] | undefined;
-        opacity?: number | undefined;
-        visible?: boolean | undefined;
         width?: number | undefined;
         height?: number | undefined;
+        opacity?: number | undefined;
+        visible?: boolean | undefined;
         strokes?: {
             color: string;
             weight: number;
@@ -663,10 +667,10 @@ export declare const BatchModificationSchema: z.ZodObject<{
             } | undefined;
             spread?: number | undefined;
         }[] | undefined;
-        opacity?: number | undefined;
-        visible?: boolean | undefined;
         width?: number | undefined;
         height?: number | undefined;
+        opacity?: number | undefined;
+        visible?: boolean | undefined;
         strokes?: {
             color: string;
             weight: number;
@@ -735,10 +739,10 @@ export declare const BatchModificationSchema: z.ZodObject<{
             } | undefined;
             spread?: number | undefined;
         }[] | undefined;
-        opacity?: number | undefined;
-        visible?: boolean | undefined;
         width?: number | undefined;
         height?: number | undefined;
+        opacity?: number | undefined;
+        visible?: boolean | undefined;
         strokes?: {
             color: string;
             weight: number;
@@ -807,10 +811,10 @@ export declare const BatchModificationSchema: z.ZodObject<{
             } | undefined;
             spread?: number | undefined;
         }[] | undefined;
-        opacity?: number | undefined;
-        visible?: boolean | undefined;
         width?: number | undefined;
         height?: number | undefined;
+        opacity?: number | undefined;
+        visible?: boolean | undefined;
         strokes?: {
             color: string;
             weight: number;

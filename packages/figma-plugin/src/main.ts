@@ -6,6 +6,14 @@
 import type { SceneNode as SceneSpec, Fill, Effect as EffectSpec } from '@figma-fast/shared';
 import { buildScene } from './scene-builder/index.js';
 import {
+  handleJamCreateSticky,
+  handleJamCreateConnector,
+  handleJamCreateShape,
+  handleJamCreateCodeBlock,
+  handleJamCreateTable,
+  handleJamGetTimer,
+} from './figjam-handlers.js';
+import {
   handleGetDocumentInfo,
   handleGetNodeInfo,
   handleGetSelection,
@@ -253,6 +261,81 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
 
     case 'batch_get_node_info':
       handleBatchGetNodeInfo(msg.nodeIds as string[], msg.depth as number | undefined)
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    // --- FigJam Tools -------------------------------------------
+
+    case 'jam_create_sticky':
+      handleJamCreateSticky(
+        msg.text as string,
+        msg.color as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.width as number | undefined,
+        msg.height as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_connector':
+      handleJamCreateConnector(
+        msg.startNodeId as string | undefined,
+        msg.endNodeId as string | undefined,
+        msg.startPosition as { x: number; y: number } | undefined,
+        msg.endPosition as { x: number; y: number } | undefined,
+        msg.startStrokeCap as string | undefined,
+        msg.endStrokeCap as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_shape':
+      handleJamCreateShape(
+        msg.shapeType as string,
+        msg.text as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_code_block':
+      handleJamCreateCodeBlock(
+        msg.code as string,
+        msg.language as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_table':
+      handleJamCreateTable(
+        msg.numRows as number,
+        msg.numCols as number,
+        msg.cellData as string[][] | undefined,
+        msg.columnWidth as number | undefined,
+        msg.rowHeight as number | undefined,
+        msg.fontSize as number | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_get_timer':
+      handleJamGetTimer()
         .then((data) => sendResult(msg.id, data))
         .catch((err) => sendError(msg.id, err));
       break;

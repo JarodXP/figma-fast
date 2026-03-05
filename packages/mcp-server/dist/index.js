@@ -17,6 +17,7 @@ const style_tools_js_1 = require("./tools/style-tools.js");
 const image_tools_js_1 = require("./tools/image-tools.js");
 const boolean_tools_js_1 = require("./tools/boolean-tools.js");
 const batch_tools_js_1 = require("./tools/batch-tools.js");
+const figjam_tools_js_1 = require("./tools/figjam-tools.js");
 const WS_PORT = parseInt(process.env.FIGMA_FAST_PORT || '3056', 10);
 // Create MCP server
 const server = new mcp_js_1.McpServer({
@@ -34,6 +35,7 @@ const server = new mcp_js_1.McpServer({
 (0, image_tools_js_1.registerImageTools)(server);
 (0, boolean_tools_js_1.registerBooleanTools)(server);
 (0, batch_tools_js_1.registerBatchTools)(server);
+(0, figjam_tools_js_1.registerFigjamTools)(server);
 // Start embedded WebSocket server (connect to or start relay)
 const CLIENT_NAME = process.env.MCP_CLIENT_NAME || undefined;
 (0, server_js_1.startWsServer)(WS_PORT, CLIENT_NAME);

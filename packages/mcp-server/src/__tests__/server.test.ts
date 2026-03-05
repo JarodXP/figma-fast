@@ -12,6 +12,7 @@ import { registerStyleTools } from '../tools/style-tools.js';
 import { registerImageTools } from '../tools/image-tools.js';
 import { registerBooleanTools } from '../tools/boolean-tools.js';
 import { registerBatchTools } from '../tools/batch-tools.js';
+import { registerFigjamTools } from '../tools/figjam-tools.js';
 
 // TEST-NF-001: MCP server starts and registers all 17 tools
 describe('MCP server tool registration', () => {
@@ -303,6 +304,7 @@ describe('Phase 10 performance tools registration', () => {
     registerImageTools(s);
     registerBooleanTools(s);
     registerBatchTools(s);
+    registerFigjamTools(s);
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await s.connect(serverTransport);
@@ -334,12 +336,30 @@ describe('Phase 10 performance tools registration', () => {
     expect(tool?.inputSchema?.properties).toHaveProperty('depth');
   });
 
-  // TEST-P10C-007: 27 tools total after Phase 10
-  it('registers exactly 27 tools after Phase 10', async () => {
+  // TEST-P10C-007: 33 tools total after Phase 10 + FigJam
+  it('registers exactly 33 tools after Phase 10 with FigJam tools', async () => {
     const { client: c } = await buildFullServerWithBatch();
     client = c;
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(27);
+    expect(tools).toHaveLength(33);
+  });
+
+  it('should register all jam_* FigJam tools', async () => {
+    const { client: c } = await buildFullServerWithBatch();
+    client = c;
+    const { tools } = await client.listTools();
+    const toolNames = tools.map((t) => t.name);
+    const jamTools = [
+      'jam_create_sticky',
+      'jam_create_connector',
+      'jam_create_shape',
+      'jam_create_code_block',
+      'jam_create_table',
+      'jam_get_timer',
+    ];
+    for (const toolName of jamTools) {
+      expect(toolNames).toContain(toolName);
+    }
   });
 });
 

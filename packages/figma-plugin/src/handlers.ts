@@ -50,6 +50,13 @@ function base64Decode(str: string): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+/** Throws if called in FigJam context. Used to guard Figma-only operations. */
+function requireFigmaDesign(toolName: string): void {
+  if ((figma as any).editorType === 'figjam') {
+    throw new Error(`Not supported in FigJam: ${toolName} is only available in Figma design files.`);
+  }
+}
+
 // ─── Read Handlers ─────────────────────────────────────────────
 
 export async function handleGetDocumentInfo(): Promise<unknown> {
@@ -68,6 +75,7 @@ export async function handleGetDocumentInfo(): Promise<unknown> {
 
   return {
     name: figma.root.name,
+    editorType: (figma as any).editorType,
     currentPageId: currentPage.id,
     currentPageName: currentPage.name,
     pages,
@@ -151,6 +159,7 @@ export async function handleGetStyles(): Promise<unknown> {
 }
 
 export async function handleGetLocalComponents(): Promise<unknown> {
+  requireFigmaDesign('get_local_components');
   const components = figma.root.findAllWithCriteria({ types: ['COMPONENT'] });
   return {
     count: components.length,
@@ -465,6 +474,7 @@ export async function handleCloneNode(nodeId: string): Promise<unknown> {
 // ─── Component Handlers ─────────────────────────────────────────
 
 export async function handleConvertToComponent(nodeId: string): Promise<unknown> {
+  requireFigmaDesign('convert_to_component');
   const node = await figma.getNodeByIdAsync(nodeId);
   if (!node) {
     throw new Error(`Node not found: ${nodeId}`);
@@ -556,6 +566,7 @@ export async function handleConvertToComponent(nodeId: string): Promise<unknown>
 }
 
 export async function handleCombineAsVariants(nodeIds: string[], name?: string): Promise<unknown> {
+  requireFigmaDesign('combine_as_variants');
   const components: ComponentNode[] = [];
   for (const nodeId of nodeIds) {
     const node = await figma.getNodeByIdAsync(nodeId);
@@ -592,6 +603,7 @@ export async function handleManageComponentProperties(
   action: 'add' | 'update' | 'delete',
   properties: Array<{ name: string; type: string; defaultValue: string | boolean; variantOptions?: string[] }>,
 ): Promise<unknown> {
+  requireFigmaDesign('manage_component_properties');
   const node = await figma.getNodeByIdAsync(componentId);
   if (!node) {
     throw new Error(`Node not found: ${componentId}`);
@@ -647,6 +659,7 @@ export async function handleManageComponentProperties(
 // ─── Boolean Operation Handler ────────────────────────────────
 
 export async function handleBooleanOperation(operation: string, nodeIds: string[]): Promise<unknown> {
+  requireFigmaDesign('boolean_operation');
   if (nodeIds.length < 2) {
     throw new Error(`Boolean operation requires at least 2 nodes, got ${nodeIds.length}`);
   }
@@ -783,6 +796,7 @@ function detectImageMimeType(bytes: Uint8Array): string {
 // ─── Style Creation Handlers ───────────────────────────────────
 
 export async function handleCreatePaintStyle(name: string, fills: Fill[]): Promise<unknown> {
+  requireFigmaDesign('create_paint_style');
   const style = figma.createPaintStyle();
   style.name = name;
 
@@ -840,6 +854,7 @@ export async function handleCreateTextStyle(
     textCase?: string;
   },
 ): Promise<unknown> {
+  requireFigmaDesign('create_text_style');
   const style = figma.createTextStyle();
   style.name = name;
 
@@ -878,6 +893,7 @@ export async function handleCreateTextStyle(
 }
 
 export async function handleCreateEffectStyle(name: string, effects: EffectSpec[]): Promise<unknown> {
+  requireFigmaDesign('create_effect_style');
   const style = figma.createEffectStyle();
   style.name = name;
 
@@ -911,6 +927,7 @@ export async function handleCreateEffectStyle(name: string, effects: EffectSpec[
 // ─── Page Management Handlers ──────────────────────────────────
 
 export async function handleCreatePage(name: string): Promise<unknown> {
+  requireFigmaDesign('create_page');
   const page = figma.createPage();
   page.name = name;
   return { id: page.id, name: page.name };

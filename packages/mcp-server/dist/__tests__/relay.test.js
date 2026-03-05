@@ -210,13 +210,13 @@ function collectMessages(socket, ms) {
         plugin.close();
     });
 });
-// TEST-R-008: Inactive client messages rejected immediately
-(0, vitest_1.describe)('TEST-R-008: Inactive client messages rejected', () => {
+// TEST-R-008: Inactive client auto-activates on first request
+(0, vitest_1.describe)('TEST-R-008: Inactive client auto-activates on request', () => {
     let relay;
     (0, vitest_1.afterEach)(async () => {
         await relay?.close();
     });
-    (0, vitest_1.it)('returns error with "Another client is currently active" for inactive client', async () => {
+    (0, vitest_1.it)('auto-activates the requesting client and forwards the message to the plugin', async () => {
         const port = 39200 + Math.floor(Math.random() * 100);
         relay = new relay_js_1.WsRelay(port);
         await relay.start();
@@ -229,22 +229,18 @@ function collectMessages(socket, ms) {
         await new Promise((resolve) => client1.on('open', resolve));
         client1.send(JSON.stringify({ type: 'register', clientId: 'uuid-1', clientName: 'Claude Desktop' }));
         await wait(50);
-        // Register second (inactive) client
+        // Register second (initially inactive) client
         const client2 = new ws_1.WebSocket(`ws://localhost:${port}`);
         await new Promise((resolve) => client2.on('open', resolve));
         client2.send(JSON.stringify({ type: 'register', clientId: 'uuid-2', clientName: 'Claude Code' }));
         await wait(50);
-        // Drain the 'registered' messages
-        const responsePromise = nextMessage(client2);
-        // Give a small gap so the 'registered' message has been consumed already
-        await wait(10);
+        // Client2 sends a request — should auto-activate and reach the plugin
+        const pluginMsgPromise = nextMessageOfType(plugin, 'ping');
         client2.send(JSON.stringify({ type: 'ping', id: 'xyz-789' }));
-        const response = await responsePromise;
-        (0, vitest_1.expect)(response.type).toBe('result');
-        (0, vitest_1.expect)(response.id).toBe('xyz-789');
-        (0, vitest_1.expect)(response.success).toBe(false);
-        (0, vitest_1.expect)(response.error).toMatch(/Another client is currently active/);
-        (0, vitest_1.expect)(response.error).toMatch(/Claude Desktop/);
+        const pluginMsg = await pluginMsgPromise;
+        (0, vitest_1.expect)(pluginMsg.type).toBe('ping');
+        (0, vitest_1.expect)(pluginMsg.id).toBe('xyz-789');
+        (0, vitest_1.expect)(relay.currentActiveClientId).toBe('uuid-2');
         client1.close();
         client2.close();
         plugin.close();
@@ -653,12 +649,13 @@ function nextMessageOfType(socket, type, timeoutMs = 1000) {
         client2.send(JSON.stringify({ type: 'ping', id: 'ping-from-B' }));
         const received = await pluginMsgPromise;
         (0, vitest_1.expect)(received).toMatchObject({ type: 'ping', id: 'ping-from-B' });
-        // Client1 (now inactive) should receive rejection
-        const rejectionPromise = nextMessage(client1);
+        // Client1 sends — auto-activates itself and its request also reaches the plugin
+        const pluginMsgPromise2 = nextMessageOfType(plugin, 'ping');
         client1.send(JSON.stringify({ type: 'ping', id: 'ping-from-A' }));
-        const rejection = await rejectionPromise;
-        (0, vitest_1.expect)(rejection.type).toBe('result');
-        (0, vitest_1.expect)(rejection.success).toBe(false);
+        const received2 = await pluginMsgPromise2;
+        (0, vitest_1.expect)(received2.type).toBe('ping');
+        (0, vitest_1.expect)(received2.id).toBe('ping-from-A');
+        (0, vitest_1.expect)(relay.currentActiveClientId).toBe('id-A');
         client1.close();
         client2.close();
         plugin.close();

@@ -14,6 +14,7 @@ const style_tools_js_1 = require("../tools/style-tools.js");
 const image_tools_js_1 = require("../tools/image-tools.js");
 const boolean_tools_js_1 = require("../tools/boolean-tools.js");
 const batch_tools_js_1 = require("../tools/batch-tools.js");
+const figjam_tools_js_1 = require("../tools/figjam-tools.js");
 // TEST-NF-001: MCP server starts and registers all 17 tools
 (0, vitest_1.describe)('MCP server tool registration', () => {
     let server;
@@ -274,6 +275,7 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, image_tools_js_1.registerImageTools)(s);
         (0, boolean_tools_js_1.registerBooleanTools)(s);
         (0, batch_tools_js_1.registerBatchTools)(s);
+        (0, figjam_tools_js_1.registerFigjamTools)(s);
         const [clientTransport, serverTransport] = inMemory_js_1.InMemoryTransport.createLinkedPair();
         await s.connect(serverTransport);
         const c = new index_js_1.Client({ name: 'test-client', version: '0.1.0' }, { capabilities: {} });
@@ -301,12 +303,29 @@ const batch_tools_js_1 = require("../tools/batch-tools.js");
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('nodeIds');
         (0, vitest_1.expect)(tool?.inputSchema?.properties).toHaveProperty('depth');
     });
-    // TEST-P10C-007: 27 tools total after Phase 10
-    (0, vitest_1.it)('registers exactly 27 tools after Phase 10', async () => {
+    // TEST-P10C-007: 33 tools total after Phase 10 + FigJam
+    (0, vitest_1.it)('registers exactly 33 tools after Phase 10 with FigJam tools', async () => {
         const { client: c } = await buildFullServerWithBatch();
         client = c;
         const { tools } = await client.listTools();
-        (0, vitest_1.expect)(tools).toHaveLength(27);
+        (0, vitest_1.expect)(tools).toHaveLength(33);
+    });
+    (0, vitest_1.it)('should register all jam_* FigJam tools', async () => {
+        const { client: c } = await buildFullServerWithBatch();
+        client = c;
+        const { tools } = await client.listTools();
+        const toolNames = tools.map((t) => t.name);
+        const jamTools = [
+            'jam_create_sticky',
+            'jam_create_connector',
+            'jam_create_shape',
+            'jam_create_code_block',
+            'jam_create_table',
+            'jam_get_timer',
+        ];
+        for (const toolName of jamTools) {
+            (0, vitest_1.expect)(toolNames).toContain(toolName);
+        }
     });
 });
 // TEST-P9-001, TEST-P9-002, TEST-P9-003, TEST-P9-010
