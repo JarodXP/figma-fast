@@ -165,16 +165,32 @@ async function main(): Promise<void> {
     }
   }
 
-  try {
-    await relay.start();
-  } catch (err: unknown) {
-    const nodeErr = err as NodeJS.ErrnoException;
-    if (nodeErr.code === 'EADDRINUSE') {
-      console.error(`[FigmaFast] Relay process: port ${port} already in use, relay already running`);
-      process.exit(0);
+  // Retry loop: the in-process relay in the parent MCP server may be occupying the port.
+  // Wait for it to release (parent exits) before binding.
+  const MAX_RETRIES = 20;
+  const RETRY_DELAY_MS = 500;
+  let started = false;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      await relay.start();
+      started = true;
+      break;
+    } catch (err: unknown) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'EADDRINUSE') {
+        if (attempt === 0) {
+          console.error(`[FigmaFast] Relay process: port ${port} in use, waiting for it to be released...`);
+        }
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+        continue;
+      }
+      console.error('[FigmaFast] Relay process: failed to start:', err);
+      process.exit(1);
     }
-    console.error('[FigmaFast] Relay process: failed to start:', err);
-    process.exit(1);
+  }
+  if (!started) {
+    console.error(`[FigmaFast] Relay process: port ${port} still in use after ${MAX_RETRIES} retries, exiting`);
+    process.exit(0);
   }
 
   writePidFile();

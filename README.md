@@ -349,8 +349,9 @@ figma-fast/
 
 1. **Claude** calls an MCP tool (e.g. `build_scene`) via stdio
 2. **MCP Server** validates params, routes the command through the WS relay
-   - The first MCP server to start launches the relay in-process on port 3056
-   - Subsequent MCP servers detect the relay and connect as clients
+   - The first MCP server to start forks a **detached relay process** on port 3056 and waits for it to signal ready
+   - Subsequent MCP servers detect the running relay and connect as clients
+   - The relay process runs independently — it persists across MCP server restarts, so the plugin stays connected
    - When a client registers, the relay immediately tells it whether the plugin is already connected (so connection order doesn't matter)
    - For image fills, the server downloads images and sends base64-encoded data
 3. **WS Relay** forwards the command to the Figma plugin (only the active client can send)
@@ -632,11 +633,13 @@ Figma does NOT hot-reload plugin code automatically.
 ## Troubleshooting
 
 **Plugin shows "Connecting..." (yellow dot)**
-- Make sure at least one MCP server is running (the first one starts the relay)
+- Make sure at least one MCP server has been started (it forks the relay on first run)
 - Check that port 3056 is reachable: `lsof -i :3056`
+- The relay process is tracked via PID file at `/tmp/figma-fast-relay-3056.pid`
 
 **Plugin shows "Disconnected" (red dot)**
-- All MCP servers may have stopped. Restart your AI client to relaunch them.
+- The relay process may have stopped. Restart your AI client to fork a new relay.
+- Check for a stale PID file: `cat /tmp/figma-fast-relay-3056.pid` — if the PID is dead (`kill -0 <pid>` fails), delete the file and restart.
 - If using a custom port, ensure the plugin UI and manifest match.
 
 **Client shows as "MCP Client \<uuid\>" in the plugin**

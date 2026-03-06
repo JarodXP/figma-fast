@@ -56,7 +56,6 @@ const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
 const path = __importStar(require("path"));
-const relay_js_1 = require("./relay.js");
 // Path to the compiled relay-process.js — resolved relative to this file (dist/ws/server.js → dist/ws/relay-process.js)
 const RELAY_PROCESS_PATH = path.resolve(__dirname, 'relay-process.js');
 /** Compute the PID file path for a given port */
@@ -66,8 +65,6 @@ function pidFilePath(port) {
 // ── Module-level state ────────────────────────────────────────────────────────
 /** Our connection to the relay */
 let relayClientSocket = null;
-/** The in-process relay instance (if we started one) */
-let inProcessRelay = null;
 /** Whether this client is active in the relay */
 let isActive = false;
 /** Whether the Figma plugin is currently connected to the relay */
@@ -101,11 +98,6 @@ function _resetForTesting() {
         relayClientSocket.close();
     }
     relayClientSocket = null;
-    // Close in-process relay if we own it
-    if (inProcessRelay) {
-        void inProcessRelay.close();
-        inProcessRelay = null;
-    }
     isActive = false;
     pluginConnected = false;
     currentPort = null;
@@ -199,74 +191,21 @@ async function startWsServerAsync(port, clientId, clientName, myGeneration) {
     }
     if (isStale())
         return;
-    // No relay running — start an in-process relay immediately for fast availability,
-    // then asynchronously attempt to fork a detached relay for persistence.
-    // The detached relay inherits the port once the in-process relay closes (when this
-    // process exits), ensuring subsequent MCP clients can still connect.
-    console.error(`[FigmaFast] No relay found on port ${port}, starting in-process relay`);
-    const relay = new relay_js_1.WsRelay(port);
-    try {
-        await relay.start();
-        if (isStale()) {
-            void relay.close();
-            return;
+    // No relay running — fork a detached relay process and wait for it to be ready.
+    // Using a detached process (rather than in-process) ensures the relay persists after
+    // this MCP server process exits, so subsequent clients and the Figma plugin can
+    // reconnect without requiring this process to still be alive.
+    console.error(`[FigmaFast] No relay found on port ${port}, forking detached relay`);
+    const child = await forkDetachedRelay(port, pidFile);
+    if (isStale()) {
+        if (child) {
+            try {
+                child.kill();
+            }
+            catch { /* ok */ }
         }
-        inProcessRelay = relay;
-        console.error(`[FigmaFast] In-process relay started on port ${port}`);
-    }
-    catch (err) {
-        const nodeErr = err;
-        if (nodeErr.code === 'EADDRINUSE') {
-            // Race condition: another process started the relay between our check and our bind
-            console.error(`[FigmaFast] Port ${port} now in use, retrying connection...`);
-            await wait(300);
-            if (isStale())
-                return;
-            await tryConnectToRelay(port, clientId, clientName, myGeneration);
-            return;
-        }
-        console.error('[FigmaFast] Failed to start relay:', err);
         return;
     }
-    // Connect to the in-process relay we just started
-    await tryConnectToRelay(port, clientId, clientName, myGeneration);
-    // In the background, fork a detached relay process so that future MCP clients
-    // can connect even after this process exits. The fork will not conflict with the
-    // in-process relay because relay-process.ts checks the port and PID file before binding.
-    // When this process exits, its in-process relay closes, and the next client will fork
-    // a new detached relay (or connect if one is already running).
-    void forkDetachedRelayBackground(port, pidFile);
-}
-/**
- * Fork a detached relay process in the background (fire-and-forget).
- * The fork may fail with EADDRINUSE if an in-process relay is running — that is expected.
- * The purpose is to have a relay that outlives this process for multi-client scenarios.
- */
-async function forkDetachedRelayBackground(port, pidFile) {
-    // Wait a moment before attempting the fork so we don't race with the in-process relay startup.
-    await wait(100);
-    // If the port is already claimed by an existing detached relay (PID file exists and alive),
-    // do not fork a new one.
-    if (fs.existsSync(pidFile)) {
-        const existingPid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
-        if (!isNaN(existingPid)) {
-            const isAlive = (() => {
-                try {
-                    process.kill(existingPid, 0);
-                    return true;
-                }
-                catch {
-                    return false;
-                }
-            })();
-            if (isAlive) {
-                console.error(`[FigmaFast] Detached relay already running (PID ${existingPid}), skipping fork`);
-                return;
-            }
-        }
-    }
-    console.error(`[FigmaFast] Forking detached relay on port ${port} for persistence`);
-    const child = await forkDetachedRelay(port, pidFile);
     if (child) {
         try {
             child.disconnect();
@@ -274,10 +213,15 @@ async function forkDetachedRelayBackground(port, pidFile) {
         catch { /* ok */ }
         child.unref();
     }
+    // Connect to the relay we just started
+    const connected2 = await tryConnectToRelay(port, clientId, clientName, myGeneration);
+    if (!connected2 && !isStale()) {
+        console.error(`[FigmaFast] Failed to connect to freshly forked relay on port ${port}`);
+    }
 }
 /**
- * Fork a detached relay process with IPC. Returns the ChildProcess if fork succeeded
- * (regardless of whether 'ready' was received), or null on spawn error.
+ * Fork a detached relay process and wait for it to signal 'ready' via IPC.
+ * Returns the ChildProcess if the relay started successfully, or null on failure.
  */
 function forkDetachedRelay(port, pidFile) {
     return new Promise((resolve) => {
@@ -293,13 +237,34 @@ function forkDetachedRelay(port, pidFile) {
             resolve(null);
             return;
         }
-        // Resolve immediately once the child process is spawned (not waiting for 'ready')
-        // The 'ready' IPC message is used for detached test scenarios but is optional here.
-        child.on('spawn', () => {
-            console.error(`[FigmaFast] Detached relay process spawned (PID ${child.pid ?? 'unknown'})`);
+        console.error(`[FigmaFast] Forking detached relay on port ${port} (PID ${child.pid ?? 'unknown'})`);
+        // Resolve when the relay signals it is listening
+        const READY_TIMEOUT_MS = 12_000; // allow up to ~10s for port retry
+        const timeout = setTimeout(() => {
+            console.error('[FigmaFast] Relay did not signal ready in time, proceeding anyway');
             resolve(child);
+        }, READY_TIMEOUT_MS);
+        child.on('message', (msg) => {
+            if (msg && typeof msg === 'object' && msg.type === 'ready') {
+                clearTimeout(timeout);
+                console.error('[FigmaFast] Detached relay ready');
+                resolve(child);
+            }
+        });
+        child.on('exit', (code) => {
+            clearTimeout(timeout);
+            if (code !== 0) {
+                console.error(`[FigmaFast] Relay process exited unexpectedly with code ${code}`);
+                resolve(null);
+            }
+            else {
+                // Exited with code 0 — relay may have found a port conflict and given up;
+                // resolve with child so caller can try to connect anyway.
+                resolve(child);
+            }
         });
         child.on('error', (err) => {
+            clearTimeout(timeout);
             console.error('[FigmaFast] Relay process spawn error:', err.message);
             resolve(null);
         });
