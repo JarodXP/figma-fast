@@ -1,4 +1,26 @@
+# Dependencies
 node_modules/
-coverage/
+
+# Build artifacts
+dist/
 *.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+*.env
+
+# Claude Code
 .claude/
+
+# Coverage
+coverage/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
