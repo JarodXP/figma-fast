@@ -845,8 +845,8 @@
       const sticky = figma.createSticky();
       yield figma.loadFontAsync({ family: "Inter", style: "Medium" });
       sticky.text.characters = text;
-      if (width !== void 0 || height !== void 0) {
-        sticky.resize(width != null ? width : sticky.width, height != null ? height : sticky.height);
+      if (width !== void 0 && width > 240) {
+        sticky.isWideWidth = true;
       }
       if (x !== void 0) sticky.x = x;
       if (y !== void 0) sticky.y = y;

@@ -36,8 +36,8 @@ export function registerFigjamTools(server: McpServer): void {
     {
       text: z.string().describe('Text content for the sticky note'),
       color: JamStickyColorSchema,
-      width: z.number().positive().optional().describe('Width of the sticky note in pixels'),
-      height: z.number().positive().optional().describe('Height of the sticky note in pixels'),
+      width: z.number().positive().optional().describe('Set >240 to use wide sticky (isWideWidth); stickies do not support arbitrary resize'),
+      height: z.number().positive().optional().describe('Ignored — sticky height is content-driven'),
       x: z.number().optional().describe('X position on the canvas'),
       y: z.number().optional().describe('Y position on the canvas'),
       parentId: z.string().optional().describe('Parent node ID to append to'),

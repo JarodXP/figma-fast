@@ -83,7 +83,7 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 
 | Tool | Purpose |
 |------|---------|
-| `jam_create_sticky` | Create a sticky note with text and color (`YELLOW`, `ORANGE`, `GREEN`, `LIGHT_GREEN`, `RED`, `BLUE`, `VIOLET`, `PINK`, `GRAY`) |
+| `jam_create_sticky` | Create a sticky note with text and color (`YELLOW`, `ORANGE`, `GREEN`, `LIGHT_GREEN`, `RED`, `BLUE`, `VIOLET`, `PINK`, `GRAY`). Pass `width > 240` for a wide sticky; stickies don't support arbitrary resize |
 | `jam_create_connector` | Create a connector between two nodes or canvas positions, with configurable stroke caps |
 | `jam_create_shape` | Create a shape with text (e.g., `SQUARE`, `ELLIPSE`, `DIAMOND`, `TRIANGLE_UP`, `PARALLELOGRAM_RIGHT`) |
 | `jam_create_code_block` | Create a code block with syntax highlighting |

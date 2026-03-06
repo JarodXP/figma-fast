@@ -24,8 +24,8 @@ function registerFigjamTools(server) {
     server.tool('jam_create_sticky', 'Create a sticky note in FigJam.', {
         text: zod_1.z.string().describe('Text content for the sticky note'),
         color: schemas_js_1.JamStickyColorSchema,
-        width: zod_1.z.number().positive().optional().describe('Width of the sticky note in pixels'),
-        height: zod_1.z.number().positive().optional().describe('Height of the sticky note in pixels'),
+        width: zod_1.z.number().positive().optional().describe('Set >240 to use wide sticky (isWideWidth); stickies do not support arbitrary resize'),
+        height: zod_1.z.number().positive().optional().describe('Ignored — sticky height is content-driven'),
         x: zod_1.z.number().optional().describe('X position on the canvas'),
         y: zod_1.z.number().optional().describe('Y position on the canvas'),
         parentId: zod_1.z.string().optional().describe('Parent node ID to append to'),

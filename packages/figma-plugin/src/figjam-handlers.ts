@@ -24,8 +24,10 @@ export async function handleJamCreateSticky(
   // Load font for sticky text -- FigJam stickies use Inter Medium by default
   await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
   sticky.text.characters = text;
-  if (width !== undefined || height !== undefined) {
-    sticky.resize(width ?? sticky.width, height ?? sticky.height);
+  // StickyNode has no resize() — it supports only isWideWidth (square vs wide).
+  // Treat width > 240 (the default square size) as a request for wide mode.
+  if (width !== undefined && width > 240) {
+    sticky.isWideWidth = true;
   }
   if (x !== undefined) sticky.x = x;
   if (y !== undefined) sticky.y = y;
