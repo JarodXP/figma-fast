@@ -1,7 +1,7 @@
 # FigmaFast -- Progress Tracker
 
-> **Version:** 4.1.0
-> **Last updated:** 2026-02-26
+> **Version:** 6.0.0
+> **Last updated:** 2026-03-06
 
 ---
 
@@ -14,7 +14,71 @@
 - No CI/CD
 - HEAD: `a2608ce` on main
 
-## Current Sprint: Multi-Client Connection Switching
+## Current Sprint: Testing Infrastructure (v6.0)
+
+Source: CTO audit of test health
+
+### Phase 4A: Fix + Infrastructure
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-601: Fix ws-server.test.ts IPv4 | BUG_FIX | DONE | 1/3 | 9/9 passing | Replaced ws://localhost with ws://127.0.0.1; fixed relay-process.js path resolution for vitest (__dirname fix); added in-process relay for test mode; tracked forked relay for cleanup |
+| TASK-602: Add coverage reporting | INFRASTRUCTURE | DONE | 1/5 | N/A | Added @vitest/coverage-v8, coverage config in vitest.config.ts, test:coverage script in package.json |
+| TASK-603: Add GitHub Actions CI | INFRASTRUCTURE | DONE | 1/5 | N/A | Created .github/workflows/ci.yml: node 20, ubuntu-latest, npm install + build + test + lint |
+
+### Phase 4B: Contract + Logic Tests
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-604: Protocol contract test | TEST_CREATION | DONE | 1/10 | 2 passing | packages/shared/src/__tests__/protocol-contract.test.ts; found missing read_node case in main.ts and added it |
+| TASK-605: Extract pure handler logic | IMPL + TEST | DONE | 1/15 | 28 passing | Extracted base64Encode/Decode, detectImageMimeType, getFontStyleFromWeight to handler-utils.ts; 28 tests in handler-utils.test.ts |
+
+### Phase 4C: Integration + Orchestrator Tests
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-606: Tool execution integration | TEST_CREATION | DONE | 1/15 | 4 new tests (21 total) | Extended server.test.ts: get_node_info happy path, modify_node schema rejection, jam_create_sticky happy path, not-connected path |
+| TASK-607: Scene builder orchestrator | TEST_CREATION | DONE | 1/20 | 9 tests | Created build-scene.test.ts: FigJam pre-flight check (4 tests), happy-path scenarios (5 tests) |
+
+---
+
+## Previous Sprint: FigJam Support (v5.0)
+
+Source: Direct user request (no PRD)
+
+### Phase 1: FigJam Foundation
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-501: Add FigJam message types | IMPLEMENTATION | DONE | 1/5 | tsc clean | Added 6 FigJam message variants to ServerToPluginMessage union |
+| TASK-502: Add FigJam Zod schemas | IMPLEMENTATION | DONE | 1/5 | tsc clean | Added JamStickyColorSchema, JamShapeTypeSchema, JamConnectorStrokeCapSchema, JamCodeLanguageSchema |
+| TASK-503: Write FigJam schema tests | TEST_CREATION | DONE | 1/8 | 10 new tests | Added FigJam schemas describe block to schemas.test.ts (40 total) |
+| TASK-504: Update manifest.json | IMPLEMENTATION | DONE | 1/2 | JSON valid | Added "figjam" to editorType array |
+| TASK-505: Add editorType to get_document_info | IMPLEMENTATION | DONE | 1/3 | build clean | Added (figma as any).editorType to handleGetDocumentInfo return |
+| TASK-506: Add FigJam guards | IMPLEMENTATION | DONE | 1/8 | build clean | Added requireFigmaDesign() helper + guards in 9 handlers |
+| TASK-507: Add FigJam node serialization | IMPLEMENTATION | DONE | 1/8 | build clean | Extended SerializedNode interface + serializeNode FigJam blocks |
+| TASK-508: Add build_scene FigJam check | IMPLEMENTATION | DONE | 1/5 | build clean | Pre-flight check after step 1 in buildScene() |
+| TASK-509: Phase 1 regression | REGRESSION | DONE | 1/10 | 120/120 | Build + test + lint all green (4 pre-existing warnings) |
+
+### Phase 2: FigJam Tools
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-510: Implement figjam-handlers.ts | IMPLEMENTATION | DONE | 1/15 | build clean | New file: 6 handlers with requireFigjam() guard |
+| TASK-511: Wire handlers into main.ts | IMPLEMENTATION | DONE | 1/5 | build clean | Added import + 6 switch cases before default |
+| TASK-512: Implement figjam-tools.ts | IMPLEMENTATION | DONE | 1/15 | build clean | New file: registerFigjamTools() with 6 MCP tools |
+| TASK-513: Register in index.ts | IMPLEMENTATION | DONE | 1/3 | build clean | Added import + registerFigjamTools(server) call |
+| TASK-514: Update server.test.ts counts | TEST_CREATION | DONE | 1/8 | 17/17 | Updated Phase 10 count 27→33, added jam_* tools test |
+
+### Phase 3: Regression
+
+| Task | Type | Status | Iterations Used | Tests Green | Notes |
+|------|------|--------|----------------|-------------|-------|
+| TASK-515: Full regression check | REGRESSION | DONE | 1/10 | 121/121 | Build + test + lint all green (4 pre-existing warnings, 0 new) |
+
+---
+
+## Previous Sprint: Multi-Client Connection Switching
 
 Source: PRD `docs/prds/multi-client-connection-switching.md`
 
@@ -59,14 +123,18 @@ Source: PRD `docs/prds/multi-client-connection-switching.md`
 
 | Suite | Status | Count | Last Run |
 |-------|--------|-------|----------|
-| shared/colors | PASSING | 11 | 2026-03-02 |
-| shared/fonts | PASSING | 8 | 2026-03-02 |
-| shared/warnings | PASSING | 7 | 2026-03-02 |
-| mcp-server/schemas | PASSING | 30 | 2026-03-02 |
-| mcp-server/server | PASSING | 16 | 2026-03-02 |
-| mcp-server/ws-server | PASSING | 9 | 2026-03-02 |
-| mcp-server/relay | PASSING | 22 | 2026-03-02 |
-| mcp-server/relay-detached | PASSING | 7 | 2026-03-02 |
+| shared/colors | PASSING | 11 | 2026-03-06 |
+| shared/fonts | PASSING | 8 | 2026-03-06 |
+| shared/warnings | PASSING | 7 | 2026-03-06 |
+| shared/protocol-contract | PASSING | 2 | 2026-03-06 |
+| mcp-server/schemas | PASSING | 40 | 2026-03-06 |
+| mcp-server/server | PASSING | 21 | 2026-03-06 |
+| mcp-server/ws-server | PASSING | 9 | 2026-03-06 |
+| mcp-server/relay | PASSING | 22 | 2026-03-06 |
+| mcp-server/relay-detached | PASSING | 7 | 2026-03-06 |
+| figma-plugin/build-node | PASSING | 9 | 2026-03-06 |
+| figma-plugin/handler-utils | PASSING | 28 | 2026-03-06 |
+| figma-plugin/build-scene | PASSING | 9 | 2026-03-06 |
 
 ## Phase 1 Implementation Notes
 
@@ -117,6 +185,16 @@ Source: PRD `docs/prds/multi-client-connection-switching.md`
 - Plugin UI height increased to 300px
 - 7 test files, 103 tests (all passing)
 - Build clean, lint: 4 pre-existing warnings only
+
+### Sprint 6 (2026-03-06): Testing Infrastructure Phase 4 (v6.0)
+- TASK-601: Fixed ws-server.test.ts 5 failing tests -- root causes: (1) ws://localhost -> ws://127.0.0.1, (2) RELAY_PROCESS_PATH wrong in tsx/vitest context (__dirname=src/ws, not dist/ws), (3) in-process relay for VITEST env to avoid fork timing issues, (4) tracked forked relay in _resetForTesting for cleanup
+- TASK-602: Added @vitest/coverage-v8, coverage config in vitest.config.ts, test:coverage script
+- TASK-603: Created .github/workflows/ci.yml with Node 20 + ubuntu-latest
+- TASK-604: Created protocol-contract.test.ts; found real bug: read_node missing from main.ts switch; added fallthrough case
+- TASK-605: Extracted base64Encode/Decode, detectImageMimeType, getFontStyleFromWeight to handler-utils.ts; 28 tests
+- TASK-606: Added tool execution integration tests to server.test.ts (4 new tests using vi.spyOn on sendToPlugin)
+- TASK-607: Created build-scene.test.ts (9 tests): FigJam pre-flight + happy-path scenarios
+- 12 test files, 173 tests (all passing)
 
 ### Sprint 5 (2026-03-02): Multi-Client Connection Switching Phase 3 -- Resilient Relay (v4.2)
 - Added relay-detached.test.ts with TEST-D-001 through TEST-D-007 (7 tests)

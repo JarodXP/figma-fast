@@ -51,7 +51,7 @@ describe('sendToPlugin - timeout', () => {
 
     // Connect a mock plugin (sends hello) that never sends a response to pings
     await new Promise<void>((resolve, reject) => {
-      clientSocket = new WebSocket(`ws://localhost:${port}`);
+      clientSocket = new WebSocket(`ws://127.0.0.1:${port}`);
       clientSocket.on('open', () => {
         // Identify as the plugin
         clientSocket!.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
@@ -82,7 +82,7 @@ describe('TEST-S-001: startWsServer starts relay when no relay running', () => {
     await wait(100);
 
     // A new WebSocket should be able to connect to the relay
-    const probe = new WebSocket(`ws://localhost:${port}`);
+    const probe = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve, reject) => {
       probe.on('open', resolve);
       probe.on('error', reject);
@@ -140,7 +140,7 @@ describe('TEST-S-003: sendToPlugin end-to-end through relay', () => {
     await wait(100);
 
     // Connect mock plugin
-    mockPlugin = new WebSocket(`ws://localhost:${port}`);
+    mockPlugin = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve) => mockPlugin!.on('open', resolve));
     mockPlugin.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
     await wait(50);
@@ -176,7 +176,7 @@ describe('TEST-S-004: sendToPlugin auto-activates client on request', () => {
     relay = new WsRelay(port);
     await relay.start();
 
-    const firstClient = new WebSocket(`ws://localhost:${port}`);
+    const firstClient = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve) => firstClient.on('open', resolve));
     firstClient.send(JSON.stringify({ type: 'register', clientId: 'external-1', clientName: 'First Client' }));
     await wait(50);
@@ -215,7 +215,7 @@ describe('TEST-S-005: isPluginConnected reflects plugin connection state', () =>
     expect(isPluginConnected()).toBe(false);
 
     // Connect mock plugin
-    mockPlugin = new WebSocket(`ws://localhost:${port}`);
+    mockPlugin = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve) => mockPlugin!.on('open', resolve));
     mockPlugin.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
     await wait(50);
@@ -239,7 +239,7 @@ describe('TEST-S-006: Race condition -- two concurrent startWsServer calls', () 
 
     // A second client connects after a tiny delay to simulate race
     const p2 = wait(10).then(async () => {
-      const client = new WebSocket(`ws://localhost:${port}`);
+      const client = new WebSocket(`ws://127.0.0.1:${port}`);
       await new Promise<void>((resolve, reject) => {
         client.on('open', resolve);
         client.on('error', reject);
@@ -252,7 +252,7 @@ describe('TEST-S-006: Race condition -- two concurrent startWsServer calls', () 
     await p1;
 
     // First client connects
-    const client1 = new WebSocket(`ws://localhost:${port}`);
+    const client1 = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve) => client1.on('open', resolve));
     client1.send(JSON.stringify({ type: 'register', clientId: 'client-1', clientName: 'First' }));
     await wait(50);
@@ -288,7 +288,7 @@ describe('TEST-S-007: sendToPlugin latency through relay under 5ms overhead', ()
     await wait(100);
 
     // Connect mock plugin that immediately responds to pings
-    mockPlugin = new WebSocket(`ws://localhost:${port}`);
+    mockPlugin = new WebSocket(`ws://127.0.0.1:${port}`);
     await new Promise<void>((resolve) => mockPlugin!.on('open', resolve));
     mockPlugin.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
     await wait(50);

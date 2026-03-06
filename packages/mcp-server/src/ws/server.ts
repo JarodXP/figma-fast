@@ -19,12 +19,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { ServerToPluginMessage, PluginToServerMessage } from '@figma-fast/shared';
+import { WsRelay } from './relay.js';
 
 /** Distributive Omit that works correctly over union types */
 type DistributiveOmit<T, K extends keyof any> = T extends any ? Omit<T, K> : never;
 
-// Path to the compiled relay-process.js — resolved relative to this file (dist/ws/server.js → dist/ws/relay-process.js)
-const RELAY_PROCESS_PATH = path.resolve(__dirname, 'relay-process.js');
+// Path to the compiled relay-process.js.
+// When running from compiled dist: __dirname = dist/ws/ → sibling relay-process.js
+// When running under vitest (tsx): __dirname = src/ws/ → need to go up to dist/ws/
+const _relayInDist = path.resolve(__dirname, 'relay-process.js');
+const _relayFromSrc = path.resolve(__dirname, '../../dist/ws/relay-process.js');
+const RELAY_PROCESS_PATH = fs.existsSync(_relayInDist) ? _relayInDist : _relayFromSrc;
 
 /** Compute the PID file path for a given port */
 function pidFilePath(port: number): string {
@@ -53,6 +58,12 @@ const pendingRequests = new Map<string, PendingRequest>();
 
 /** Whether startWsServer has been called (to support idempotency per port) */
 let currentPort: number | null = null;
+
+/** The forked relay process (if we started one), tracked for cleanup in tests */
+let forkedRelayProcess: import('child_process').ChildProcess | null = null;
+
+/** The in-process relay (used during tests to avoid fork timing issues) */
+let inProcessRelay: WsRelay | null = null;
 
 /**
  * Generation counter — incremented on every _resetForTesting() call.
@@ -88,6 +99,18 @@ export function _resetForTesting(): void {
   isActive = false;
   pluginConnected = false;
   currentPort = null;
+
+  // Kill the forked relay process if we started one (test isolation)
+  if (forkedRelayProcess) {
+    try { forkedRelayProcess.kill('SIGTERM'); } catch { /* ok */ }
+    forkedRelayProcess = null;
+  }
+
+  // Close the in-process relay if we started one (test isolation)
+  if (inProcessRelay) {
+    void inProcessRelay.close();
+    inProcessRelay = null;
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -187,25 +210,45 @@ async function startWsServerAsync(port: number, clientId: string, clientName: st
 
   if (isStale()) return;
 
-  // No relay running — fork a detached relay process and wait for it to be ready.
-  // Using a detached process (rather than in-process) ensures the relay persists after
-  // this MCP server process exits, so subsequent clients and the Figma plugin can
-  // reconnect without requiring this process to still be alive.
-  console.error(`[FigmaFast] No relay found on port ${port}, forking detached relay`);
-  const child = await forkDetachedRelay(port, pidFile);
-  if (isStale()) {
-    if (child) { try { child.kill(); } catch { /* ok */ } }
-    return;
-  }
-  if (child) {
-    try { child.disconnect(); } catch { /* ok */ }
-    child.unref();
+  // Under vitest, start an in-process relay for speed (avoids fork timing issues in tests).
+  // In production, fork a detached relay process so it persists after this process exits.
+  if (process.env.VITEST) {
+    console.error(`[FigmaFast] No relay found on port ${port}, starting in-process relay (test mode)`);
+    const relay = new WsRelay(port);
+    try {
+      await relay.start();
+    } catch (err) {
+      console.error(`[FigmaFast] Failed to start in-process relay on port ${port}:`, err);
+      return;
+    }
+    if (isStale()) {
+      void relay.close();
+      return;
+    }
+    inProcessRelay = relay;
+  } else {
+    // No relay running — fork a detached relay process and wait for it to be ready.
+    // Using a detached process (rather than in-process) ensures the relay persists after
+    // this MCP server process exits, so subsequent clients and the Figma plugin can
+    // reconnect without requiring this process to still be alive.
+    console.error(`[FigmaFast] No relay found on port ${port}, forking detached relay`);
+    const child = await forkDetachedRelay(port, pidFile);
+    if (isStale()) {
+      if (child) { try { child.kill(); } catch { /* ok */ } }
+      return;
+    }
+    if (child) {
+      // Track the child process for cleanup in tests
+      forkedRelayProcess = child;
+      try { child.disconnect(); } catch { /* ok */ }
+      child.unref();
+    }
   }
 
   // Connect to the relay we just started
   const connected2 = await tryConnectToRelay(port, clientId, clientName, myGeneration);
   if (!connected2 && !isStale()) {
-    console.error(`[FigmaFast] Failed to connect to freshly forked relay on port ${port}`);
+    console.error(`[FigmaFast] Failed to connect to freshly started relay on port ${port}`);
   }
 }
 

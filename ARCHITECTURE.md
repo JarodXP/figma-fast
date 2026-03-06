@@ -80,6 +80,7 @@ figma-fast/
           image-tools.ts          # 1 tool (set_image_fill)
           boolean-tools.ts        # 1 tool (boolean_operation)
           batch-tools.ts          # 2 tools (batch_modify, batch_get_node_info)
+          figjam-tools.ts         # [NEW v5] 6 tools (jam_create_sticky, jam_create_connector, jam_create_shape, jam_create_code_block, jam_create_table, jam_get_timer)
         __tests__/
           server.test.ts          # MCP tool registration tests
           ws-server.test.ts       # WS server unit tests
@@ -89,14 +90,15 @@ figma-fast/
     figma-plugin/
       src/
         main.ts                   # Plugin main thread (Figma sandbox)
-        handlers.ts               # Command handlers (1000+ lines)
-        serialize-node.ts         # Node serialization
+        handlers.ts               # Command handlers (1000+ lines) [MODIFIED v5 -- FigJam guards added]
+        figjam-handlers.ts        # [NEW v5] FigJam-specific handlers (jam_create_sticky, etc.)
+        serialize-node.ts         # Node serialization [MODIFIED v5 -- FigJam node types added]
         ui.html                   # Plugin UI with WS client [MODIFIED in Phase 2]
         scene-builder/
           index.ts                # Scene builder orchestrator
           build-node.ts           # Node creation logic
           fonts.ts                # Font management
-      manifest.json               # devAllowedDomains: ws://localhost:3056
+      manifest.json               # editorType: ["figma", "figjam"], devAllowedDomains: ws://localhost:3056
     shared/
       src/
         index.ts                  # Public exports

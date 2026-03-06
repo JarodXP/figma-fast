@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi, beforeEach } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -414,5 +414,115 @@ describe('Phase 9 boolean operation tool registration', () => {
     client = c;
     const { tools } = await client.listTools();
     expect(tools).toHaveLength(25);
+  });
+});
+
+// ── Tool Execution Integration Tests ─────────────────────────────────────────
+//
+// These tests verify that the MCP tools correctly delegate to sendToPlugin,
+// return expected results on success, and handle schema validation errors.
+//
+// sendToPlugin is mocked so no real WS connection is needed.
+
+describe('Tool execution integration tests', () => {
+  let client: Client;
+  let server: McpServer;
+
+  // Build a full server with all tools registered
+  async function buildIntegrationServer(): Promise<{ server: McpServer; client: Client }> {
+    const s = new McpServer({ name: 'figma-fast-integration-test', version: '0.1.0' });
+    registerPingTool(s);
+    registerBuildSceneTool(s);
+    registerReadTools(s);
+    registerEditTools(s);
+    registerComponentTools(s);
+    registerPageTools(s);
+    registerStyleTools(s);
+    registerImageTools(s);
+    registerBooleanTools(s);
+    registerBatchTools(s);
+    registerFigjamTools(s);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await s.connect(serverTransport);
+    const c = new Client({ name: 'integration-client', version: '0.1.0' }, { capabilities: {} });
+    await c.connect(clientTransport);
+    return { server: s, client: c };
+  }
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    try { await client?.close(); } catch { /* ignore */ }
+  });
+
+  it('get_node_info happy path: sends message to plugin and returns data', async () => {
+    const { client: c } = await buildIntegrationServer();
+    client = c;
+
+    // Mock sendToPlugin to resolve with a successful result
+    const wsServer = await import('../ws/server.js');
+    vi.spyOn(wsServer, 'isPluginConnected').mockReturnValue(true);
+    vi.spyOn(wsServer, 'sendToPlugin').mockResolvedValue({
+      type: 'result',
+      id: 'test-id',
+      success: true,
+      data: { id: 'node-1', name: 'Test Node', type: 'RECTANGLE' },
+    });
+
+    const result = await client.callTool({ name: 'get_node_info', arguments: { nodeId: 'node-1' } });
+
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toHaveLength(1);
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('Test Node');
+  });
+
+  it('modify_node with invalid args: schema rejects missing nodeId with isError response', async () => {
+    const { client: c } = await buildIntegrationServer();
+    client = c;
+
+    // Calling modify_node without required nodeId should be caught by schema validation
+    // The MCP SDK returns a tool error response (isError: true) rather than throwing
+    const result = await client.callTool({ name: 'modify_node', arguments: { properties: { name: 'test' } } });
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('nodeId');
+  });
+
+  it('jam_create_sticky happy path: sends message to plugin and returns created node info', async () => {
+    const { client: c } = await buildIntegrationServer();
+    client = c;
+
+    const wsServer = await import('../ws/server.js');
+    vi.spyOn(wsServer, 'isPluginConnected').mockReturnValue(true);
+    vi.spyOn(wsServer, 'sendToPlugin').mockResolvedValue({
+      type: 'result',
+      id: 'test-id',
+      success: true,
+      data: { nodeId: 'sticky-1', name: 'Sticky', type: 'STICKY' },
+    });
+
+    const result = await client.callTool({
+      name: 'jam_create_sticky',
+      arguments: { text: 'Hello FigJam!' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('sticky-1');
+  });
+
+  it('get_node_info returns not-connected message when plugin is disconnected', async () => {
+    const { client: c } = await buildIntegrationServer();
+    client = c;
+
+    const wsServer = await import('../ws/server.js');
+    vi.spyOn(wsServer, 'isPluginConnected').mockReturnValue(false);
+
+    const result = await client.callTool({ name: 'get_node_info', arguments: { nodeId: 'node-1' } });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { type: string; text: string }).text;
+    expect(text).toContain('not connected');
   });
 });

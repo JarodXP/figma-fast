@@ -1,597 +1,1097 @@
-# FigmaFast -- Task Breakdown
-
-> **Version:** 4.0.0
-> **Last updated:** 2026-02-26
-> **Mandatory sequence:** Tests -> Implementation -> Validation -> Regression -> Fix (if needed)
-> **Source PRD:** `docs/prds/multi-client-connection-switching.md`
+# Task Registry -- FigJam Support + Testing Infrastructure
+# Plan: v6.0.0 -- 2026-03-06
+# Status: PENDING | IN_PROGRESS | DONE | BLOCKED | FAILED
+# Mandatory sequence: Tests -> Implementation -> Validation -> Regression -> Fix
 
 ---
 
-## Pre-Work: Fix Stale Test Assertions
+## Phase 1: FigJam Foundation
 
-### TASK-000: Fix tool count assertions in server.test.ts
+### TASK-501: Add FigJam message types to shared package
+- **Status**: DONE
+- **Depends on**: none
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/shared/src/messages.ts`. Add new message types for all FigJam commands to the
+    `ServerToPluginMessage` union type. Add these variants:
+
+    ```
+    | { type: 'jam_create_sticky'; id: string; text: string; color?: string; x?: number; y?: number; parentId?: string }
+    | { type: 'jam_create_connector'; id: string; startNodeId?: string; endNodeId?: string; startPosition?: { x: number; y: number }; endPosition?: { x: number; y: number }; startStrokeCap?: string; endStrokeCap?: string }
+    | { type: 'jam_create_shape'; id: string; shapeType: string; text?: string; x?: number; y?: number; parentId?: string }
+    | { type: 'jam_create_code_block'; id: string; code: string; language?: string; x?: number; y?: number; parentId?: string }
+    | { type: 'jam_create_table'; id: string; numRows: number; numCols: number; cellData?: string[][]; x?: number; y?: number; parentId?: string }
+    | { type: 'jam_get_timer'; id: string }
+    ```
+
+    Run `cd packages/shared && npx tsc --noEmit` to verify types compile.
+- **Max iterations**: 5
+- **Files affected**: `packages/shared/src/messages.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast/packages/shared && npx tsc --noEmit`
+
+### TASK-502: Add FigJam Zod schemas to schemas.ts
+- **Status**: DONE
+- **Depends on**: TASK-501
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/schemas.ts`. Add Zod schemas for FigJam tool parameters.
+
+    Add these exported schemas:
+
+    ```typescript
+    export const JamStickyColorSchema = z.enum([
+      'GRAY', 'YELLOW', 'ORANGE', 'GREEN', 'BLUE', 'VIOLET', 'PINK', 'RED',
+      'LIGHT_GRAY', 'TEAL', 'LIGHT_GREEN'
+    ]).optional().describe('Sticky note background color (default: YELLOW)');
+
+    export const JamShapeTypeSchema = z.enum([
+      'SQUARE', 'ELLIPSE', 'DIAMOND', 'TRIANGLE_UP', 'TRIANGLE_DOWN',
+      'PARALLELOGRAM_RIGHT', 'PARALLELOGRAM_LEFT',
+      'ENG_DATABASE', 'ENG_QUEUE', 'ENG_FILE', 'ENG_FOLDER',
+    ]).describe('FigJam shape type');
+
+    export const JamConnectorStrokeCapSchema = z.enum([
+      'NONE', 'ARROW_LINES', 'ARROW_EQUILATERAL', 'TRIANGLE_FILLED',
+      'DIAMOND_FILLED', 'CIRCLE_FILLED',
+    ]).optional().describe('Connector endpoint stroke cap style');
+
+    export const JamCodeLanguageSchema = z.enum([
+      'PLAIN', 'BASH', 'CPP', 'CSS', 'GO', 'GRAPHQL', 'HTML', 'JAVA',
+      'JAVASCRIPT', 'JSON', 'KOTLIN', 'PYTHON', 'RUBY', 'RUST', 'SQL',
+      'SWIFT', 'TYPESCRIPT', 'XML', 'YAML',
+    ]).optional().describe('Code block language (default: PLAIN)');
+    ```
+
+    Run `cd packages/mcp-server && npx tsc --noEmit` to verify.
+- **Max iterations**: 5
+- **Files affected**: `packages/mcp-server/src/schemas.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast/packages/mcp-server && npx tsc --noEmit`
+
+### TASK-503: Write FigJam schema validation tests
+- **Status**: DONE
+- **Depends on**: TASK-502
+- **Type**: TEST_CREATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/__tests__/schemas.test.ts` and `packages/mcp-server/src/schemas.ts`.
+
+    Add a new `describe('FigJam schemas')` block to schemas.test.ts with tests for:
+
+    1. JamStickyColorSchema: valid "YELLOW" passes, invalid "PURPLE" fails
+    2. JamShapeTypeSchema: valid "DIAMOND" passes, invalid "HEXAGON" fails, missing value fails
+    3. JamConnectorStrokeCapSchema: valid "ARROW_LINES" passes, undefined passes (optional)
+    4. JamCodeLanguageSchema: valid "JAVASCRIPT" passes, "INVALID" fails, undefined passes (optional)
+
+    These correspond to TEST-FJ-002 and TEST-FJ-003 from TESTS.md.
+
+    Run `cd packages/mcp-server && npx vitest run __tests__/schemas.test.ts` until all tests pass.
+- **Max iterations**: 8
+- **Files affected**: `packages/mcp-server/src/__tests__/schemas.test.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm test -- --run packages/mcp-server/src/__tests__/schemas.test.ts`
+
+### TASK-504: Update manifest.json to include figjam editor type
+- **Status**: DONE
+- **Depends on**: none
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/manifest.json`.
+    Change `"editorType": ["figma"]` to `"editorType": ["figma", "figjam"]`.
+    This is a one-line change. Verify the JSON is still valid.
+- **Max iterations**: 2
+- **Files affected**: `packages/figma-plugin/manifest.json`
+- **Verification**: `node -e "JSON.parse(require('fs').readFileSync('/Users/jarod/Projects/jarod/figma-fast/packages/figma-plugin/manifest.json', 'utf8')); console.log('Valid JSON')"`
+
+### TASK-505: Add editorType to get_document_info response
+- **Status**: DONE
+- **Depends on**: none
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/handlers.ts`. Find the `handleGetDocumentInfo` function.
+
+    Add `editorType: (figma as any).editorType` to the returned object. The return should become:
+
+    ```typescript
+    return {
+      name: figma.root.name,
+      editorType: (figma as any).editorType,
+      currentPageId: currentPage.id,
+      currentPageName: currentPage.name,
+      pages,
+      topLevelFrames,
+    };
+    ```
+
+    Use `(figma as any).editorType` because the Figma plugin typings bundled in the project
+    may not include this property. It returns `"figma"`, `"figjam"`, or `"dev"` at runtime.
+
+    Run `cd packages/figma-plugin && npm run build` to verify.
+- **Max iterations**: 3
+- **Files affected**: `packages/figma-plugin/src/handlers.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-506: Add FigJam guards to Figma-only handlers
+- **Status**: DONE
+- **Depends on**: TASK-505
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/handlers.ts`.
+
+    Add a helper function at the top of the file (after imports, before the base64 section):
+
+    ```typescript
+    /** Throws if called in FigJam context. Used to guard Figma-only operations. */
+    function requireFigmaDesign(toolName: string): void {
+      if ((figma as any).editorType === 'figjam') {
+        throw new Error(`Not supported in FigJam: ${toolName} is only available in Figma design files.`);
+      }
+    }
+    ```
+
+    Then add `requireFigmaDesign('tool_name');` as the FIRST line in each of these handlers:
+    1. `handleCreatePage` -- add `requireFigmaDesign('create_page');`
+    2. `handleConvertToComponent` -- add `requireFigmaDesign('convert_to_component');`
+    3. `handleCombineAsVariants` -- add `requireFigmaDesign('combine_as_variants');`
+    4. `handleManageComponentProperties` -- add `requireFigmaDesign('manage_component_properties');`
+    5. `handleCreatePaintStyle` -- add `requireFigmaDesign('create_paint_style');`
+    6. `handleCreateTextStyle` -- add `requireFigmaDesign('create_text_style');`
+    7. `handleCreateEffectStyle` -- add `requireFigmaDesign('create_effect_style');`
+    8. `handleBooleanOperation` -- add `requireFigmaDesign('boolean_operation');`
+    9. `handleGetLocalComponents` -- add `requireFigmaDesign('get_local_components');`
+
+    Run `npm run build` to verify compilation.
+- **Max iterations**: 8
+- **Files affected**: `packages/figma-plugin/src/handlers.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-507: Add FigJam node serialization
+- **Status**: DONE
+- **Depends on**: none
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/serialize-node.ts`.
+
+    Extend the `SerializedNode` interface with FigJam-specific optional properties:
+
+    ```typescript
+    // FigJam: Sticky
+    text?: string;
+    authorVisible?: boolean;
+    // FigJam: ShapeWithText
+    shapeType?: string;
+    // FigJam: Connector
+    connectorStart?: unknown;
+    connectorEnd?: unknown;
+    connectorStartStrokeCap?: string;
+    connectorEndStrokeCap?: string;
+    // FigJam: CodeBlock
+    code?: string;
+    codeLanguage?: string;
+    // FigJam: Table
+    numRows?: number;
+    numColumns?: number;
+    ```
+
+    Then in the `serializeNode` function, add FigJam-specific extraction AFTER the existing
+    component properties section (after the INSTANCE block) and BEFORE the children section.
+    Add this block:
+
+    ```typescript
+    // FigJam node types
+    if (node.type === 'STICKY') {
+      const sticky = node as any;
+      if (sticky.text) result.text = sticky.text.characters;
+      result.authorVisible = sticky.authorVisible;
+    }
+    if (node.type === 'SHAPE_WITH_TEXT') {
+      const shape = node as any;
+      result.shapeType = shape.shapeType;
+      if (shape.text) result.text = shape.text.characters;
+    }
+    if (node.type === 'CONNECTOR') {
+      const conn = node as any;
+      result.connectorStart = conn.connectorStart;
+      result.connectorEnd = conn.connectorEnd;
+      result.connectorStartStrokeCap = conn.connectorStartStrokeCap;
+      result.connectorEndStrokeCap = conn.connectorEndStrokeCap;
+    }
+    if (node.type === 'CODE_BLOCK') {
+      const cb = node as any;
+      result.code = cb.code;
+      result.codeLanguage = cb.codeLanguage;
+    }
+    if (node.type === 'TABLE') {
+      const table = node as any;
+      result.numRows = table.numRows;
+      result.numColumns = table.numColumns;
+    }
+    ```
+
+    Use `as any` casts because the Figma typings may not include FigJam-specific types.
+
+    Run `npm run build` to verify compilation.
+- **Max iterations**: 8
+- **Files affected**: `packages/figma-plugin/src/serialize-node.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-508: Add build_scene pre-flight FigJam check
+- **Status**: DONE
+- **Depends on**: none
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/scene-builder/index.ts`.
+
+    Add a pre-flight check in the `buildScene` function, AFTER step 1 (DETERMINE PARENT,
+    around line 57) and BEFORE step 2 (COLLECT FONTS, line 62). Insert this:
+
+    ```typescript
+    // 1.5. FIGJAM CHECK -- reject unsupported node types
+    if ((figma as any).editorType === 'figjam') {
+      const FIGJAM_UNSUPPORTED = new Set(['COMPONENT', 'COMPONENT_SET', 'COMPONENT_INSTANCE']);
+      const unsupported = new Set<string>();
+      function scanUnsupported(s: SceneSpec) {
+        if (FIGJAM_UNSUPPORTED.has(s.type)) unsupported.add(s.type);
+        if (s.children) s.children.forEach(scanUnsupported);
+      }
+      scanUnsupported(spec);
+      if (unsupported.size > 0) {
+        const types = Array.from(unsupported).join(', ');
+        return {
+          success: false,
+          rootNodeId: '',
+          nodeIdMap: {},
+          nodeCount: 0,
+          errors: [`FigJam does not support the following node types: ${types}. Use Figma design files for components.`],
+          fontSubstitutions: [],
+          durationMs: Date.now() - startTime,
+        };
+      }
+    }
+    ```
+
+    Run `npm run build` to verify compilation.
+- **Max iterations**: 5
+- **Files affected**: `packages/figma-plugin/src/scene-builder/index.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-509: Phase 1 build and lint check
+- **Status**: DONE
+- **Depends on**: TASK-501, TASK-502, TASK-503, TASK-504, TASK-505, TASK-506, TASK-507, TASK-508
+- **Type**: REGRESSION
+- **Ralph prompt**: |
+    Run the full build and test suite to verify Phase 1 work:
+    ```
+    cd /Users/jarod/Projects/jarod/figma-fast
+    npm run build
+    npm test -- --run
+    npm run lint
+    ```
+    All 110+ existing tests must pass. New schema tests must pass.
+    If any test fails, read the failing test and the code it tests, then fix.
+- **Max iterations**: 10
+- **Files affected**: none (verification only)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build && npm test -- --run && npm run lint`
+
+---
+
+## Phase 2: FigJam Tools
+
+### TASK-510: Implement figjam-handlers.ts
+- **Status**: DONE
+- **Depends on**: TASK-509
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Create new file `packages/figma-plugin/src/figjam-handlers.ts`.
+
+    Read `packages/figma-plugin/src/handlers.ts` for the pattern (how handlers work, how
+    they return data, how they use commitUndo).
+
+    Implement these handlers:
+
+    ```typescript
+    /**
+     * FigJam-specific plugin handlers.
+     * These only work when figma.editorType === 'figjam'.
+     */
+
+    /** Throws if not in FigJam context */
+    function requireFigjam(toolName: string): void {
+      if ((figma as any).editorType !== 'figjam') {
+        throw new Error(`${toolName} is only available in FigJam files.`);
+      }
+    }
+
+    export async function handleJamCreateSticky(
+      text: string,
+      color?: string,
+      x?: number,
+      y?: number,
+      parentId?: string,
+    ): Promise<unknown> {
+      requireFigjam('jam_create_sticky');
+      const sticky = (figma as any).createSticky() as any;
+      // Load font for sticky text -- FigJam stickies use Inter Medium by default
+      await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+      sticky.text.characters = text;
+      if (x !== undefined) sticky.x = x;
+      if (y !== undefined) sticky.y = y;
+      if (parentId) {
+        const parent = await figma.getNodeByIdAsync(parentId);
+        if (parent && 'children' in parent) {
+          (parent as any).appendChild(sticky);
+        }
+      }
+      try { figma.commitUndo?.(); } catch { /* may not be available */ }
+      return { nodeId: sticky.id, name: sticky.name, type: sticky.type };
+    }
+
+    export async function handleJamCreateConnector(
+      startNodeId?: string,
+      endNodeId?: string,
+      startPosition?: { x: number; y: number },
+      endPosition?: { x: number; y: number },
+      startStrokeCap?: string,
+      endStrokeCap?: string,
+    ): Promise<unknown> {
+      requireFigjam('jam_create_connector');
+      const connector = (figma as any).createConnector() as any;
+
+      if (startNodeId) {
+        const startNode = await figma.getNodeByIdAsync(startNodeId);
+        if (!startNode) throw new Error(`Start node not found: ${startNodeId}`);
+        connector.connectorStart = { endpointNodeId: startNodeId, magnet: 'AUTO' };
+      } else if (startPosition) {
+        connector.connectorStart = { position: startPosition };
+      }
+
+      if (endNodeId) {
+        const endNode = await figma.getNodeByIdAsync(endNodeId);
+        if (!endNode) throw new Error(`End node not found: ${endNodeId}`);
+        connector.connectorEnd = { endpointNodeId: endNodeId, magnet: 'AUTO' };
+      } else if (endPosition) {
+        connector.connectorEnd = { position: endPosition };
+      }
+
+      if (startStrokeCap) connector.connectorStartStrokeCap = startStrokeCap;
+      if (endStrokeCap) connector.connectorEndStrokeCap = endStrokeCap;
+
+      try { figma.commitUndo?.(); } catch { /* may not be available */ }
+      return { nodeId: connector.id, name: connector.name, type: connector.type };
+    }
+
+    export async function handleJamCreateShape(
+      shapeType: string,
+      text?: string,
+      x?: number,
+      y?: number,
+      parentId?: string,
+    ): Promise<unknown> {
+      requireFigjam('jam_create_shape');
+      const shape = (figma as any).createShapeWithText() as any;
+      shape.shapeType = shapeType;
+      if (text) {
+        await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+        shape.text.characters = text;
+      }
+      if (x !== undefined) shape.x = x;
+      if (y !== undefined) shape.y = y;
+      if (parentId) {
+        const parent = await figma.getNodeByIdAsync(parentId);
+        if (parent && 'children' in parent) (parent as any).appendChild(shape);
+      }
+      try { figma.commitUndo?.(); } catch { /* may not be available */ }
+      return { nodeId: shape.id, name: shape.name, type: shape.type, shapeType: shape.shapeType };
+    }
+
+    export async function handleJamCreateCodeBlock(
+      code: string,
+      language?: string,
+      x?: number,
+      y?: number,
+      parentId?: string,
+    ): Promise<unknown> {
+      requireFigjam('jam_create_code_block');
+      const codeBlock = (figma as any).createCodeBlock() as any;
+      codeBlock.code = code;
+      if (language) codeBlock.codeLanguage = language;
+      if (x !== undefined) codeBlock.x = x;
+      if (y !== undefined) codeBlock.y = y;
+      if (parentId) {
+        const parent = await figma.getNodeByIdAsync(parentId);
+        if (parent && 'children' in parent) (parent as any).appendChild(codeBlock);
+      }
+      try { figma.commitUndo?.(); } catch { /* may not be available */ }
+      return { nodeId: codeBlock.id, name: codeBlock.name, type: codeBlock.type };
+    }
+
+    export async function handleJamCreateTable(
+      numRows: number,
+      numCols: number,
+      cellData?: string[][],
+      x?: number,
+      y?: number,
+      parentId?: string,
+    ): Promise<unknown> {
+      requireFigjam('jam_create_table');
+      const table = (figma as any).createTable(numRows, numCols) as any;
+      if (x !== undefined) table.x = x;
+      if (y !== undefined) table.y = y;
+      if (parentId) {
+        const parent = await figma.getNodeByIdAsync(parentId);
+        if (parent && 'children' in parent) (parent as any).appendChild(table);
+      }
+      if (cellData) {
+        await figma.loadFontAsync({ family: 'Inter', style: 'Medium' });
+        for (let r = 0; r < cellData.length && r < numRows; r++) {
+          const row = cellData[r];
+          if (!row) continue;
+          for (let c = 0; c < row.length && c < numCols; c++) {
+            try {
+              const cell = table.cellAt(r, c);
+              if (cell && cell.text) {
+                cell.text.characters = row[c];
+              }
+            } catch {
+              // Skip cells that fail -- partial population is acceptable
+            }
+          }
+        }
+      }
+      try { figma.commitUndo?.(); } catch { /* may not be available */ }
+      return { nodeId: table.id, name: table.name, type: table.type, numRows, numColumns: numCols };
+    }
+
+    export async function handleJamGetTimer(): Promise<unknown> {
+      requireFigjam('jam_get_timer');
+      const timer = (figma as any).timer;
+      if (!timer) return { status: 'unavailable' };
+      return {
+        remaining: timer.remaining,
+        totalDuration: timer.totalDuration,
+        isRunning: timer.isRunning,
+        isPaused: timer.isPaused,
+      };
+    }
+    ```
+
+    Run `npm run build` to verify.
+- **Max iterations**: 15
+- **Files affected**: `packages/figma-plugin/src/figjam-handlers.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-511: Wire FigJam handlers into main.ts message router
+- **Status**: DONE
+- **Depends on**: TASK-510
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/main.ts`.
+
+    Add imports from the new figjam-handlers.ts at the top (after existing imports):
+
+    ```typescript
+    import {
+      handleJamCreateSticky,
+      handleJamCreateConnector,
+      handleJamCreateShape,
+      handleJamCreateCodeBlock,
+      handleJamCreateTable,
+      handleJamGetTimer,
+    } from './figjam-handlers.js';
+    ```
+
+    Add new cases in the switch statement BEFORE the `default` case.
+    Add them in a new section comment block:
+
+    ```typescript
+    // --- FigJam Tools -------------------------------------------
+
+    case 'jam_create_sticky':
+      handleJamCreateSticky(
+        msg.text as string,
+        msg.color as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_connector':
+      handleJamCreateConnector(
+        msg.startNodeId as string | undefined,
+        msg.endNodeId as string | undefined,
+        msg.startPosition as { x: number; y: number } | undefined,
+        msg.endPosition as { x: number; y: number } | undefined,
+        msg.startStrokeCap as string | undefined,
+        msg.endStrokeCap as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_shape':
+      handleJamCreateShape(
+        msg.shapeType as string,
+        msg.text as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_code_block':
+      handleJamCreateCodeBlock(
+        msg.code as string,
+        msg.language as string | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_create_table':
+      handleJamCreateTable(
+        msg.numRows as number,
+        msg.numCols as number,
+        msg.cellData as string[][] | undefined,
+        msg.x as number | undefined,
+        msg.y as number | undefined,
+        msg.parentId as string | undefined,
+      )
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+
+    case 'jam_get_timer':
+      handleJamGetTimer()
+        .then((data) => sendResult(msg.id, data))
+        .catch((err) => sendError(msg.id, err));
+      break;
+    ```
+
+    Run `npm run build` to verify.
+- **Max iterations**: 5
+- **Files affected**: `packages/figma-plugin/src/main.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-512: Implement figjam-tools.ts (MCP tool registration)
+- **Status**: DONE
+- **Depends on**: TASK-502, TASK-501
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/tools/edit-tools.ts` for the pattern (how MCP tools are
+    registered, how they call sendToPlugin, how they format responses).
+
+    Also read `packages/mcp-server/src/schemas.ts` for the FigJam schemas (JamStickyColorSchema,
+    JamShapeTypeSchema, JamConnectorStrokeCapSchema, JamCodeLanguageSchema).
+
+    Create new file `packages/mcp-server/src/tools/figjam-tools.ts` with a
+    `registerFigjamTools(server: McpServer)` function that registers 6 tools:
+
+    1. `jam_create_sticky` -- params: text (required string), color (JamStickyColorSchema),
+       x (optional number), y (optional number), parentId (optional string).
+       Description: Create a sticky note in FigJam.
+
+    2. `jam_create_connector` -- params: startNodeId (optional string), endNodeId (optional string),
+       startPosition (optional {x,y}), endPosition (optional {x,y}),
+       startStrokeCap (JamConnectorStrokeCapSchema), endStrokeCap (JamConnectorStrokeCapSchema).
+       Description: Create a connector between nodes in FigJam.
+
+    3. `jam_create_shape` -- params: shapeType (JamShapeTypeSchema), text (optional string),
+       x (optional number), y (optional number), parentId (optional string).
+       Description: Create a shape with text in FigJam.
+
+    4. `jam_create_code_block` -- params: code (required string),
+       language (JamCodeLanguageSchema), x, y, parentId.
+       Description: Create a code block in FigJam.
+
+    5. `jam_create_table` -- params: numRows (int 1-100), numCols (int 1-100),
+       cellData (optional string[][]), x, y, parentId.
+       Description: Create a table in FigJam.
+
+    6. `jam_get_timer` -- no params.
+       Description: Get the FigJam timer state (read-only).
+
+    Each tool follows the same pattern as edit-tools.ts:
+    - Check `isPluginConnected()`, return NOT_CONNECTED if false
+    - Call `sendToPlugin({ type: 'jam_*', ...params }, TIMEOUT)`
+    - Format the response as text content
+    - Catch errors and return them as isError: true
+
+    Run `npm run build` to verify.
+- **Max iterations**: 15
+- **Files affected**: `packages/mcp-server/src/tools/figjam-tools.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-513: Register FigJam tools in index.ts
+- **Status**: DONE
+- **Depends on**: TASK-512
+- **Type**: IMPLEMENTATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/index.ts`.
+
+    Add the import:
+    ```typescript
+    import { registerFigjamTools } from './tools/figjam-tools.js';
+    ```
+
+    Add the registration call after `registerBatchTools(server);`:
+    ```typescript
+    registerFigjamTools(server);
+    ```
+
+    Run `npm run build` to verify.
+- **Max iterations**: 3
+- **Files affected**: `packages/mcp-server/src/index.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build`
+
+### TASK-514: Update server.test.ts tool count assertions
+- **Status**: DONE
+- **Depends on**: TASK-513
+- **Type**: TEST_CREATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/__tests__/server.test.ts`.
+
+    Find all tool count assertions (lines with `expect(...).toBe(...)` or `toBeGreaterThanOrEqual`
+    that check the number of registered tools). Each assertion needs to increase by 6
+    (the 6 new jam_* tools: jam_create_sticky, jam_create_connector, jam_create_shape,
+    jam_create_code_block, jam_create_table, jam_get_timer).
+
+    Also add a new test that verifies the jam_* tool names are present:
+
+    ```typescript
+    it('should register all jam_* FigJam tools', async () => {
+      // Use the existing pattern from the test file to get tool names
+      const jamTools = ['jam_create_sticky', 'jam_create_connector', 'jam_create_shape',
+        'jam_create_code_block', 'jam_create_table', 'jam_get_timer'];
+      for (const toolName of jamTools) {
+        expect(toolNames).toContain(toolName);
+      }
+    });
+    ```
+
+    Adapt the above to match the existing test file's pattern for listing tools.
+
+    Run `npm test -- --run packages/mcp-server/src/__tests__/server.test.ts` until all pass.
+- **Max iterations**: 8
+- **Files affected**: `packages/mcp-server/src/__tests__/server.test.ts`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm test -- --run packages/mcp-server/src/__tests__/server.test.ts`
+
+---
+
+## Phase 3: Regression & Validation
+
+### TASK-515: Full regression check
+- **Status**: DONE
+- **Depends on**: TASK-514, TASK-511
+- **Type**: REGRESSION
+- **Ralph prompt**: |
+    Run the complete build, test, and lint pipeline:
+    ```
+    cd /Users/jarod/Projects/jarod/figma-fast
+    npm run build
+    npm test -- --run
+    npm run lint
+    ```
+
+    ALL tests must pass (existing 110 + new schema tests + updated server tests).
+    Build must succeed.
+    Lint must pass (4 pre-existing warnings acceptable, 0 new warnings or errors).
+
+    If anything fails, read the failing test/error, identify the root cause, and fix it.
+    Iterate until green.
+- **Max iterations**: 10
+- **Files affected**: various (fixes only)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build && npm test -- --run && npm run lint`
+
+---
+
+## Phase 4: Testing Infrastructure
+
+### TASK-601: Fix failing ws-server.test.ts tests (IPv4)
 - **Status**: DONE
 - **Depends on**: none
 - **Type**: BUG_FIX
 - **Ralph prompt**: |
-    Read `packages/mcp-server/src/__tests__/server.test.ts`. There are 6 failing tests due to stale
-    tool count assertions. The `get_image_fill` tool was added to read-tools.ts (registered inside
-    `registerReadTools`), incrementing the tool count by 1 for every test group that includes
-    `registerReadTools`. Fix each `toHaveLength(N)` assertion to N+1:
-    - "registers exactly 16 tools" -> 17 (line ~70)
-    - "registers exactly 19 tools after Phase 6" -> 20 (line ~223)
-    - "registers exactly 22 tools after Phase 7B" -> 23 (line ~151)
-    - "registers exactly 23 tools after Phase 8" -> 24 (line ~276)
-    - "registers exactly 24 tools after Phase 9" -> 25 (line ~395)
-    - "registers exactly 26 tools after Phase 10" -> 27 (line ~342)
-    Run `npm test` and confirm all 74 tests pass.
+    Read `packages/mcp-server/src/__tests__/ws-server.test.ts`.
+
+    Replace ALL occurrences of `ws://localhost:${port}` with `ws://127.0.0.1:${port}`.
+    There are exactly 8 occurrences across lines 54, 85, 143, 179, 218, 242, 255, 291.
+
+    This is the same fix applied to `packages/mcp-server/src/ws/server.ts` in Sprint 5.
+    Node.js v24+ resolves `localhost` to `::1` (IPv6) but the WS relay binds to `127.0.0.1` only.
+
+    Run `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/mcp-server/src/__tests__/ws-server.test.ts`
+    until all 9 tests in the file pass.
 - **Max iterations**: 3
-- **Files affected**: `packages/mcp-server/src/__tests__/server.test.ts`
-- **Verification**: `npm test` -- all 74 tests pass, 0 failures
-
----
-
-## Phase 1: WS Relay with Multi-Client Registration
-
-### TASK-101: Add relay message types to shared package
-- **Status**: DONE
-- **Depends on**: TASK-000
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/shared/src/messages.ts` and `packages/shared/src/index.ts`.
-
-    Add the following new types to `packages/shared/src/messages.ts`:
-
-    1. `RelayClientInfo` interface:
-       ```typescript
-       export interface RelayClientInfo {
-         clientId: string;
-         clientName: string;
-         isActive: boolean;
-         connectedAt: number;
-       }
-       ```
-
-    2. `ClientToRelayMessage` type -- messages MCP clients send TO the relay:
-       ```typescript
-       export type ClientToRelayMessage =
-         | { type: 'register'; clientId: string; clientName: string }
-         | ServerToPluginMessage;  // forwarded commands
-       ```
-
-    3. `RelayToClientMessage` type -- messages relay sends TO MCP clients:
-       ```typescript
-       export type RelayToClientMessage =
-         | { type: 'registered'; clientId: string; isActive: boolean }
-         | { type: 'activated' }
-         | { type: 'deactivated'; reason: string }
-         | { type: 'relay_error'; id: string; error: string }
-         | PluginToServerMessage;  // forwarded responses
-       ```
-
-    4. `PluginToRelayMessage` type -- messages plugin sends TO relay:
-       ```typescript
-       export type PluginToRelayMessage =
-         | { type: 'hello'; ts: number }
-         | { type: 'set_active_client'; clientId: string }
-         | PluginToServerMessage;  // forwarded responses (pong, result)
-       ```
-
-    5. `RelayToPluginMessage` type -- messages relay sends TO plugin:
-       ```typescript
-       export type RelayToPluginMessage =
-         | { type: 'client_list'; clients: RelayClientInfo[] }
-         | ServerToPluginMessage;  // forwarded commands
-       ```
-
-    Also export these new types from `packages/shared/src/index.ts`.
-
-    Run `npm run build --workspace=packages/shared` to verify compilation.
-    Run `npm test` to verify no regressions.
-- **Max iterations**: 5
-- **Files affected**: `packages/shared/src/messages.ts`, `packages/shared/src/index.ts`
-- **Verification**: `npm run build --workspace=packages/shared && npm test`
-
-### TASK-102: Write relay server tests (TEST-R-001 through TEST-R-015)
-- **Status**: DONE
-- **Depends on**: TASK-101
-- **Type**: TEST_CREATION
-- **Ralph prompt**: |
-    Create `packages/mcp-server/src/__tests__/relay.test.ts`.
-
-    Read `TESTS.md` for the full Given/When/Then specifications for TEST-R-001 through TEST-R-015.
-    Read `packages/mcp-server/src/__tests__/ws-server.test.ts` for the project's test style conventions.
-
-    Write vitest tests implementing the specifications. Key patterns:
-    - Use `WebSocket` and `WebSocketServer` from 'ws' for mock connections
-    - Each test should use a random high port (39200 + Math.floor(Math.random() * 100)) to avoid conflicts
-    - Clean up all sockets and servers in afterEach
-    - Use `new Promise` with `setTimeout` for async timing (20-50ms waits for connection events)
-    - The relay module will be at `../ws/relay.js` and export: `WsRelay` class with constructor(port),
-      properties: `clientRegistry`, `activeClientId`, `pluginSocket`, and methods: `close()`
-
-    Helper pattern for each test:
-    ```typescript
-    // Create relay
-    const relay = new WsRelay(port);
-    await relay.start();
-
-    // Create mock client (MCP server)
-    const client = new WebSocket(`ws://localhost:${port}`);
-    await new Promise(resolve => client.on('open', resolve));
-    client.send(JSON.stringify({ type: 'register', clientId: 'id-1', clientName: 'Claude Desktop' }));
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Create mock plugin
-    const plugin = new WebSocket(`ws://localhost:${port}`);
-    await new Promise(resolve => plugin.on('open', resolve));
-    plugin.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
-    await new Promise(resolve => setTimeout(resolve, 50));
-    ```
-
-    Write ALL 15 tests. They will all fail initially since the relay module does not exist yet.
-    Verify the test file compiles: `npx tsc --noEmit -p packages/mcp-server/tsconfig.json` (expected:
-    errors about missing relay module -- that is fine for now).
-
-    Do NOT create the relay implementation. Only write the tests.
-- **Max iterations**: 10
-- **Files affected**: `packages/mcp-server/src/__tests__/relay.test.ts`
-- **Verification**: File exists, TypeScript syntax is valid (aside from missing relay import)
-
-### TASK-103: Implement WsRelay class (ws/relay.ts)
-- **Status**: DONE
-- **Depends on**: TASK-102
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Create `packages/mcp-server/src/ws/relay.ts`.
-
-    Read `TESTS.md` TEST-R-001 through TEST-R-015 for the behavioral contract.
-    Read `packages/mcp-server/src/__tests__/relay.test.ts` for the test expectations.
-    Read `packages/shared/src/messages.ts` for the relay message types.
-    Read `packages/mcp-server/src/ws/server.ts` for the current WS server pattern.
-
-    Implement the `WsRelay` class:
-
-    ```typescript
-    export class WsRelay {
-      private wss: WebSocketServer | null = null;
-      private pluginSocket: WebSocket | null = null;
-      private clients: Map<string, { socket: WebSocket; clientName: string; connectedAt: number }> = new Map();
-      private activeClientId: string | null = null;
-      // Map from message correlation ID to the clientId that sent it
-      private pendingMessageSources: Map<string, string> = new Map();
-
-      constructor(private port: number) {}
-
-      async start(): Promise<void> { /* ... */ }
-      close(): Promise<void> { /* ... */ }
-
-      // Expose for testing
-      get clientRegistry() { return this.clients; }
-      get currentActiveClientId() { return this.activeClientId; }
-      get currentPluginSocket() { return this.pluginSocket; }
-    }
-    ```
-
-    Key behaviors:
-    1. On new WS connection, wait for first message to classify:
-       - `{ type: 'hello' }` -> plugin connection. Store as pluginSocket. If old plugin exists, replace it.
-       - `{ type: 'register', clientId, clientName }` -> MCP client. Add to clients map. If first client,
-         set as active. Send back `{ type: 'registered', clientId, isActive }`.
-    2. On message from classified MCP client:
-       - If client is active AND plugin is connected: forward message to plugin, record correlation ID mapping.
-       - If client is active AND plugin NOT connected: send back error `{ type: 'relay_error', id, error: "Figma plugin is not connected..." }`.
-       - If client is inactive: send back error `{ type: 'relay_error', id, error: "Another client is currently active..." }`.
-    3. On message from plugin (after hello):
-       - If message has an `id` field, look up pendingMessageSources to find originating client.
-       - Forward the message to that client.
-    4. On client disconnect: remove from clients map. If was active, set activeClientId to null.
-    5. On plugin disconnect: set pluginSocket to null. For all pending messages, send error to originating clients.
-    6. Malformed messages: log to stderr, do not crash.
-    7. close(): close all sockets, close WebSocketServer.
-
-    Run `npm test -- relay` to run just the relay tests. Fix until all 15 pass.
-- **Max iterations**: 20
-- **Files affected**: `packages/mcp-server/src/ws/relay.ts`
-- **Verification**: `npm test -- relay` -- all TEST-R-001 through TEST-R-015 pass
-
-### TASK-104: Write server.ts refactored tests (TEST-S-001 through TEST-S-007)
-- **Status**: DONE
-- **Depends on**: TASK-103
-- **Type**: TEST_CREATION
-- **Ralph prompt**: |
-    Read `TESTS.md` TEST-S-001 through TEST-S-007 for the behavioral contract.
-    Read `packages/mcp-server/src/__tests__/ws-server.test.ts` for existing test patterns.
-    Read `packages/mcp-server/src/ws/server.ts` for the current API.
-
-    Extend `packages/mcp-server/src/__tests__/ws-server.test.ts` with new test suites for the
-    relay-integrated behavior. The existing 2 tests should be preserved but may need adjustment
-    since the module behavior is changing.
-
-    Key patterns:
-    - startWsServer now takes an optional clientName parameter: `startWsServer(port, clientName?)`
-    - sendToPlugin still has the same signature but routes through the relay
-    - Tests need a mock plugin that connects to the relay and responds
-
-    Write the 7 new tests. They will fail initially since server.ts has not been refactored yet.
-
-    IMPORTANT: Each test must use a unique random high port to avoid conflicts with the relay tests.
-    Use ports in the range 39300-39399.
-- **Max iterations**: 8
 - **Files affected**: `packages/mcp-server/src/__tests__/ws-server.test.ts`
-- **Verification**: File compiles, new tests exist alongside existing tests
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/mcp-server/src/__tests__/ws-server.test.ts`
+- **Tests**: TEST-TI-001
 
-### TASK-105: Refactor ws/server.ts to use relay
+### TASK-602: Add coverage reporting
 - **Status**: DONE
-- **Depends on**: TASK-104
-- **Type**: IMPLEMENTATION
+- **Depends on**: TASK-601
+- **Type**: INFRASTRUCTURE
 - **Ralph prompt**: |
-    Read `packages/mcp-server/src/ws/server.ts` (current implementation -- 128 lines).
-    Read `packages/mcp-server/src/ws/relay.ts` (new relay module from TASK-103).
-    Read `packages/shared/src/messages.ts` for relay message types.
-    Read `TESTS.md` TEST-S-001 through TEST-S-007 for the behavioral contract.
-    Read `packages/mcp-server/src/__tests__/ws-server.test.ts` for what the tests expect.
-
-    Refactor `ws/server.ts`. The exported API MUST remain identical:
-    - `startWsServer(port: number, clientName?: string): void`  (clientName is new optional param)
-    - `sendToPlugin(message, timeoutMs?): Promise<PluginToServerMessage>`
-    - `isPluginConnected(): boolean`
-
-    New behavior of startWsServer:
-    1. Try to connect to ws://localhost:{port} as a WebSocket client
-    2. If connection succeeds: relay is already running. Send register message. Done.
-    3. If connection fails (ECONNREFUSED): no relay running. Create a WsRelay(port), start it,
-       then connect to it as a client. Send register message.
-    4. Race condition handling: if step 3 fails with EADDRINUSE, retry step 1 (up to 3 times,
-       300ms delay, 1.5x backoff).
-
-    Client registration:
-    - Generate clientId with `randomUUID()` from crypto
-    - clientName from parameter, or `process.env.MCP_CLIENT_NAME`, or "MCP Client <short-uuid>"
-    - Send `{ type: 'register', clientId, clientName }` after connecting
-
-    sendToPlugin implementation:
-    - Same signature as before
-    - Instead of sending directly to pluginSocket, send through the relay client connection
-    - Pending request tracking (resolve/reject/timeout) remains the same
-    - Handle `relay_error` type messages from the relay (inactive client rejection, plugin not connected)
-
-    isPluginConnected:
-    - Returns true if relay client connection is open (the relay handles plugin tracking)
-    - Note: In the refactored version, we cannot know if the plugin is truly connected from the
-      client side. We optimistically return true if the relay connection is active. The relay will
-      return an error if the plugin is not connected.
-    - Actually: the relay sends `registered` with isActive. Track active status. isPluginConnected
-      returns true if we are connected AND active. This preserves the existing behavior where tools
-      check isPluginConnected before calling sendToPlugin.
-
-    Handle relay messages:
-    - `registered`: store isActive status
-    - `activated`: set isActive = true
-    - `deactivated`: set isActive = false
-    - `relay_error`: resolve/reject the corresponding pending request
-    - `pong` / `result`: resolve the corresponding pending request (same as current)
-
-    IMPORTANT: Do NOT change any tool files. They all import from './ws/server.js' and must work unchanged.
-
-    Run `npm test -- ws-server` to run the server tests. Fix until all pass (existing + new).
-    Then run `npm test` to verify full regression.
-- **Max iterations**: 20
-- **Files affected**: `packages/mcp-server/src/ws/server.ts`
-- **Verification**: `npm test` -- all tests pass (existing + new relay + new server)
-
-### TASK-106: Update index.ts entry point
-- **Status**: DONE
-- **Depends on**: TASK-105
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/mcp-server/src/index.ts` (54 lines).
-
-    Make a small update: pass the client name to startWsServer.
-
-    Change line 41 from:
-    ```typescript
-    startWsServer(WS_PORT);
-    ```
-    to:
-    ```typescript
-    const CLIENT_NAME = process.env.MCP_CLIENT_NAME || undefined;
-    startWsServer(WS_PORT, CLIENT_NAME);
-    ```
-
-    Update the log message on line 48 to include the client name if set:
-    ```typescript
-    const nameInfo = CLIENT_NAME ? ` as "${CLIENT_NAME}"` : '';
-    console.error(`[FigmaFast] MCP server running (stdio), relay on port ${WS_PORT}${nameInfo}`);
-    ```
-
-    Run `npm test` to verify no regressions.
-    Run `npm run build` to verify TypeScript compilation.
-- **Max iterations**: 3
-- **Files affected**: `packages/mcp-server/src/index.ts`
-- **Verification**: `npm run build && npm test`
-
-### TASK-107: Phase 1 full regression check
-- **Status**: DONE
-- **Depends on**: TASK-106
-- **Type**: REGRESSION
-- **Ralph prompt**: |
-    Run the full test suite and build:
-    ```
-    npm run build
-    npm test
-    npm run lint
-    ```
-
-    All tests must pass. All builds must succeed. All lint must pass.
-
-    If any failures, diagnose and fix. Common issues:
-    - Port conflicts between test suites (use different port ranges)
-    - Module-level singleton state in ws/server.ts leaking between tests
-    - TypeScript compilation errors from new types
-
-    If tests fail, read the error output, identify the root cause, fix it, and re-run.
-    Repeat until everything is green.
-- **Max iterations**: 10
-- **Files affected**: any files that need fixes
-- **Verification**: `npm run build && npm test && npm run lint` -- all green
-
----
-
-## Phase 2: Plugin UI Client Picker
-
-### TASK-201: Write relay broadcast tests (TEST-R-020 through TEST-R-026)
-- **Status**: DONE
-- **Depends on**: TASK-107
-- **Type**: TEST_CREATION
-- **Ralph prompt**: |
-    Read `TESTS.md` TEST-R-020 through TEST-R-026 for specifications.
-    Read `packages/mcp-server/src/__tests__/relay.test.ts` for existing test patterns.
-
-    Add new test suites to `packages/mcp-server/src/__tests__/relay.test.ts` for:
-    - client_list broadcast on connect/disconnect
-    - set_active_client handling
-    - activated/deactivated notifications
-    - Response routing by correlation ID across switches
-    - Active client disconnect leaves no auto-promotion
-
-    Use the same port range conventions and cleanup patterns.
-    These tests will initially fail since the broadcast logic has not been added yet.
-- **Max iterations**: 8
-- **Files affected**: `packages/mcp-server/src/__tests__/relay.test.ts`
-- **Verification**: Tests compile and exist
-
-### TASK-202: Implement relay broadcast and switch logic
-- **Status**: DONE
-- **Depends on**: TASK-201
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/mcp-server/src/ws/relay.ts` (current relay implementation).
-    Read `packages/shared/src/messages.ts` for message types.
-    Read `TESTS.md` TEST-R-020 through TEST-R-026 for behavioral contract.
-    Read `packages/mcp-server/src/__tests__/relay.test.ts` for test expectations.
-
-    Extend the WsRelay class with:
-
-    1. `broadcastClientList()` method: sends `{ type: 'client_list', clients: [...] }` to pluginSocket
-       whenever client registry changes (connect, disconnect, active switch).
-
-    2. Handle `set_active_client` from plugin: when plugin sends `{ type: 'set_active_client', clientId }`:
-       - Validate clientId exists in registry
-       - Update activeClientId
-       - Send `{ type: 'activated' }` to newly active client
-       - Send `{ type: 'deactivated', reason: "User switched to '<name>'" }` to old active client
-       - Broadcast updated client_list to plugin
-
-    3. On client connect: after registration, call broadcastClientList()
-    4. On client disconnect: after removal, call broadcastClientList()
-
-    5. Response routing by correlation ID: when a plugin response comes in with an `id`,
-       route it to the client that originally sent the message (from pendingMessageSources map),
-       NOT to the currently active client. This ensures in-flight responses are not lost on switch.
-
-    Run `npm test -- relay` until all tests pass (old + new).
-- **Max iterations**: 15
-- **Files affected**: `packages/mcp-server/src/ws/relay.ts`
-- **Verification**: `npm test -- relay` -- all relay tests pass
-
-### TASK-203: Update server.ts to handle activated/deactivated messages
-- **Status**: DONE
-- **Depends on**: TASK-202
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/mcp-server/src/ws/server.ts`.
-
-    Ensure the relay client message handler in server.ts handles:
-    - `{ type: 'activated' }` -- set internal isActive flag to true, log to stderr
-    - `{ type: 'deactivated', reason }` -- set isActive flag to false, log reason to stderr
-
-    These should already be partially handled from TASK-105. Verify and add logging if missing.
-
-    Run `npm test` to verify no regressions.
-- **Max iterations**: 5
-- **Files affected**: `packages/mcp-server/src/ws/server.ts`
-- **Verification**: `npm test`
-
-### TASK-204: Update plugin UI (ui.html) with client list
-- **Status**: DONE
-- **Depends on**: TASK-202
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/figma-plugin/src/ui.html` (158 lines).
-    Read `TESTS.md` TEST-UI-001 through TEST-UI-005 for UI specifications.
-    Read the PRD section 7, Slice 2 for the UI design description.
-
-    Update `ui.html` to:
-
-    1. Add a client list section below the connection status:
-       ```html
-       <div id="clientList" class="client-list">
-         <div class="client-list-header">AI Clients</div>
-         <div id="clientListItems"></div>
-       </div>
+    1. Install the coverage provider:
+       ```
+       cd /Users/jarod/Projects/jarod/figma-fast && npm install -D @vitest/coverage-v8
        ```
 
-    2. Add CSS for the client list:
-       - `.client-list`: margin-top 12px, container styling
-       - `.client-list-header`: font-weight 600, font-size 12px, margin-bottom 8px
-       - `.client-item`: display flex, align-items center, gap 8px, padding 6px 8px, border-radius 4px, cursor pointer
-       - `.client-item:hover`: background #f5f5f5
-       - `.client-item.active`: background #e8f4fd
-       - `.client-radio`: 12x12 circle, border 2px solid #ccc
-       - `.client-radio.active`: border-color #2563eb, filled center
-       - `.client-name`: flex 1, font-size 12px
-       - `.no-clients`: color #999, font-size 11px, font-style italic
-
-    3. Add JavaScript to handle client_list messages:
-       ```javascript
-       // In ws.onmessage handler, BEFORE forwarding to plugin main thread:
-       if (msg.type === 'client_list') {
-         renderClientList(msg.clients);
-         return; // Do NOT forward to plugin main thread
-       }
-       ```
-
-    4. `renderClientList(clients)` function:
-       - If no clients: show "No AI clients connected"
-       - For each client: render a clickable row with radio button, name, and connected time
-       - Active client has filled radio
-       - Clicking an inactive client sends `{ type: 'set_active_client', clientId }` to WS
-
-    5. Increase the plugin UI height from 200 to 300 to accommodate the client list:
-       In `packages/figma-plugin/src/main.ts` line 36:
-       `figma.showUI(__html__, { visible: true, width: 300, height: 300 });`
-
-    Build the plugin: `npm run build --workspace=packages/figma-plugin`
-    This is manual-test territory -- no automated tests for the UI.
-- **Max iterations**: 10
-- **Files affected**: `packages/figma-plugin/src/ui.html`, `packages/figma-plugin/src/main.ts`
-- **Verification**: `npm run build --workspace=packages/figma-plugin` succeeds
-
-### TASK-205: Phase 2 full regression check
-- **Status**: DONE
-- **Depends on**: TASK-203, TASK-204
-- **Type**: REGRESSION
-- **Ralph prompt**: |
-    Run the full test suite and build:
-    ```
-    npm run build
-    npm test
-    npm run lint
-    ```
-
-    All tests must pass. All builds must succeed. Lint must pass.
-    If failures, diagnose and fix.
-- **Max iterations**: 10
-- **Files affected**: any files that need fixes
-- **Verification**: `npm run build && npm test && npm run lint` -- all green
-
----
-
-## Phase 3: Resilient Relay (Detached Process)
-
-### TASK-301: Write detached relay tests (TEST-D-001 through TEST-D-007)
-- **Status**: DONE
-- **Depends on**: TASK-205
-- **Type**: TEST_CREATION
-- **Ralph prompt**: |
-    Create `packages/mcp-server/src/__tests__/relay-detached.test.ts`.
-
-    Read `TESTS.md` TEST-D-001 through TEST-D-007 for specifications.
-
-    Write vitest tests for the detached relay behavior:
-    - Use `child_process.fork` or `child_process.spawn` in tests to simulate the detached relay
-    - Use `os.tmpdir()` for PID file location
-    - Use short idle timeout (2s) for the auto-exit test
-    - Clean up PID files and kill processes in afterEach
-    - Use random ports in the 39400-39499 range
-
-    The detached relay entry point will be at `../ws/relay-process.js` (a standalone script
-    that creates a WsRelay and listens for shutdown signals).
-
-    These tests will fail initially since the detached process module does not exist.
-- **Max iterations**: 8
-- **Files affected**: `packages/mcp-server/src/__tests__/relay-detached.test.ts`
-- **Verification**: Test file compiles (aside from missing module import errors)
-
-### TASK-302: Create relay-process.ts (standalone relay entry point)
-- **Status**: DONE
-- **Depends on**: TASK-301
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Create `packages/mcp-server/src/ws/relay-process.ts`.
-
-    This is a standalone Node.js script that:
-    1. Reads port from process.argv[2] or FIGMA_FAST_PORT env var (default 3056)
-    2. Reads idle timeout from process.argv[3] or FIGMA_FAST_RELAY_IDLE_TIMEOUT env var (default 60000ms)
-    3. Reads PID file path from process.argv[4] or constructs from os.tmpdir() + '/figma-fast-relay.pid'
-    4. Creates a WsRelay instance and starts it
-    5. Writes own PID to PID file
-    6. Sets up idle timeout: when all connections drop, start a timer. If no new connections
-       within timeout, clean up PID file and exit.
-    7. Handles SIGTERM and SIGINT: graceful shutdown, clean up PID file, exit.
-    8. Sends 'ready' message to parent process (if parent exists) via process.send()
-
-    Run `npm run build --workspace=packages/mcp-server` to verify compilation.
-- **Max iterations**: 10
-- **Files affected**: `packages/mcp-server/src/ws/relay-process.ts`
-- **Verification**: `npm run build --workspace=packages/mcp-server`
-
-### TASK-303: Update server.ts to fork detached relay
-- **Status**: DONE
-- **Depends on**: TASK-302
-- **Type**: IMPLEMENTATION
-- **Ralph prompt**: |
-    Read `packages/mcp-server/src/ws/server.ts`.
-    Read `packages/mcp-server/src/ws/relay-process.ts`.
-
-    Update the startWsServer function in server.ts:
-
-    When no relay is found (connection to port fails), instead of creating a WsRelay in-process:
-    1. Check for existing PID file at `os.tmpdir() + '/figma-fast-relay.pid'`
-    2. If PID file exists, check if process is alive: `process.kill(pid, 0)`
-       - If alive, retry connecting (relay may be starting up)
-       - If dead, remove stale PID file, proceed to step 3
-    3. Fork the relay-process.ts as a detached child:
+    2. Read `vitest.config.ts`. Add the `coverage` block inside the `test` object:
        ```typescript
-       const child = fork(relayProcessPath, [String(port)], {
-         detached: true,
-         stdio: ['ignore', 'ignore', 'ignore', 'ipc']
+       export default defineConfig({
+         test: {
+           include: ['packages/*/src/**/*.test.ts'],
+           environment: 'node',
+           passWithNoTests: true,
+           coverage: {
+             provider: 'v8',
+             reporter: ['text', 'lcov'],
+             exclude: ['**/node_modules/**', '**/*.test.ts', '**/dist/**'],
+           },
+         },
        });
-       child.unref();
        ```
-    4. Wait for 'ready' message from child process (with timeout)
-    5. Connect to the relay as a client
 
-    Handle edge cases:
-    - EADDRINUSE on port: retry connecting (another process may have started relay first)
-    - Fork failure: fall back to in-process relay (WsRelay) as degraded mode
+    3. Read `package.json` (root). Add a new script:
+       ```
+       "test:coverage": "vitest run --coverage"
+       ```
+       Add it after the existing `"test"` script line.
 
-    Run `npm test -- relay-detached` to run detached tests. Fix until passing.
-    Then run `npm test` for full regression.
-- **Max iterations**: 15
-- **Files affected**: `packages/mcp-server/src/ws/server.ts`
-- **Verification**: `npm test` -- all tests pass
+    4. Run `npm run test:coverage` to verify coverage output is generated.
 
-### TASK-304: Phase 3 full regression check
+    5. Verify that a `coverage/` directory was created with lcov data.
+- **Max iterations**: 5
+- **Files affected**: `vitest.config.ts`, `package.json`
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run test:coverage`
+- **Tests**: TEST-TI-002
+
+### TASK-603: Add GitHub Actions CI workflow
 - **Status**: DONE
-- **Depends on**: TASK-303
-- **Type**: REGRESSION
+- **Depends on**: TASK-601
+- **Type**: INFRASTRUCTURE
 - **Ralph prompt**: |
-    Run the full test suite and build:
-    ```
-    npm run build
-    npm test
-    npm run lint
+    1. Create the directory:
+       ```
+       mkdir -p /Users/jarod/Projects/jarod/figma-fast/.github/workflows
+       ```
+
+    2. Create file `.github/workflows/ci.yml` with this content:
+
+       ```yaml
+       name: CI
+
+       on:
+         push:
+           branches: [main]
+         pull_request:
+           branches: [main]
+
+       jobs:
+         build-and-test:
+           runs-on: ubuntu-latest
+
+           steps:
+             - uses: actions/checkout@v4
+
+             - name: Setup Node.js
+               uses: actions/setup-node@v4
+               with:
+                 node-version: '24'
+                 cache: 'npm'
+
+             - name: Install dependencies
+               run: npm ci
+
+             - name: Build all packages
+               run: npm run build
+
+             - name: Run tests
+               run: npm test
+
+             - name: Run linter
+               run: npm run lint
+       ```
+
+    3. Validate the YAML is syntactically correct:
+       ```
+       python3 -c "import yaml; yaml.safe_load(open('/Users/jarod/Projects/jarod/figma-fast/.github/workflows/ci.yml')); print('Valid YAML')"
+       ```
+- **Max iterations**: 5
+- **Files affected**: `.github/workflows/ci.yml` (NEW)
+- **Verification**: `ls -la /Users/jarod/Projects/jarod/figma-fast/.github/workflows/ci.yml && python3 -c "import yaml; yaml.safe_load(open('/Users/jarod/Projects/jarod/figma-fast/.github/workflows/ci.yml')); print('Valid YAML')"`
+- **Tests**: TEST-TI-003
+
+### TASK-604: Add protocol contract test
+- **Status**: DONE
+- **Depends on**: TASK-601
+- **Type**: TEST_CREATION
+- **Ralph prompt**: |
+    Create a new test file: `packages/shared/src/__tests__/protocol-contract.test.ts`
+
+    This test verifies that every message type in the `ServerToPluginMessage` union
+    in `packages/shared/src/messages.ts` has a corresponding `case` in the switch
+    statement in `packages/figma-plugin/src/main.ts`.
+
+    Read both source files:
+    - `packages/shared/src/messages.ts`
+    - `packages/figma-plugin/src/main.ts`
+
+    Implementation approach:
+    ```typescript
+    import { describe, it, expect } from 'vitest';
+    import { readFileSync } from 'node:fs';
+    import { resolve } from 'node:path';
+
+    describe('Protocol contract: ServerToPluginMessage vs main.ts switch', () => {
+      const projectRoot = resolve(__dirname, '../../../../');
+      const messagesSrc = readFileSync(resolve(projectRoot, 'packages/shared/src/messages.ts'), 'utf8');
+      const mainSrc = readFileSync(resolve(projectRoot, 'packages/figma-plugin/src/main.ts'), 'utf8');
+
+      // Extract type literals from ServerToPluginMessage union
+      // The union ends at the next "export type" declaration
+      const unionMatch = messagesSrc.match(/export type ServerToPluginMessage\s*=[\s\S]*?(?=\n\n?\/\*\*|\nexport\s)/);
+      if (!unionMatch) throw new Error('Could not find ServerToPluginMessage union');
+
+      const typeRegex = /type:\s*'([^']+)'/g;
+      const messageTypes = new Set<string>();
+      let match;
+      while ((match = typeRegex.exec(unionMatch[0])) !== null) {
+        messageTypes.add(match[1]);
+      }
+
+      // Extract case labels from main.ts switch
+      const caseRegex = /case\s+'([^']+)'/g;
+      const switchCases = new Set<string>();
+      while ((match = caseRegex.exec(mainSrc)) !== null) {
+        switchCases.add(match[1]);
+      }
+
+      it('every ServerToPluginMessage type has a case in main.ts switch', () => {
+        const missingCases = [...messageTypes].filter(t => !switchCases.has(t));
+        expect(missingCases, `Message types without handlers: ${missingCases.join(', ')}`).toEqual([]);
+      });
+
+      it('every case in main.ts switch corresponds to a ServerToPluginMessage type', () => {
+        const extraCases = [...switchCases].filter(t => !messageTypes.has(t));
+        expect(extraCases, `Switch cases without message types: ${extraCases.join(', ')}`).toEqual([]);
+      });
+
+      it('sanity: found at least 25 message types', () => {
+        expect(messageTypes.size).toBeGreaterThanOrEqual(25);
+        expect(switchCases.size).toBeGreaterThanOrEqual(25);
+      });
+    });
     ```
 
-    All tests must pass. All builds must succeed. Lint must pass.
-    Pay special attention to:
-    - Detached process cleanup (no orphan processes left by tests)
-    - PID file cleanup (no stale PID files left by tests)
-    - Port conflicts between test suites
+    Adjust path resolution as needed. The `__dirname` in the test file will be
+    `packages/shared/src/__tests__/`, so `../../../../` reaches the project root.
 
-    If failures, diagnose and fix.
+    Run: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/shared/src/__tests__/protocol-contract.test.ts`
 - **Max iterations**: 10
-- **Files affected**: any files that need fixes
-- **Verification**: `npm run build && npm test && npm run lint` -- all green
+- **Files affected**: `packages/shared/src/__tests__/protocol-contract.test.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/shared/src/__tests__/protocol-contract.test.ts`
+- **Tests**: TEST-TI-010, TEST-TI-011
+
+### TASK-605: Extract pure handler logic and write tests
+- **Status**: DONE
+- **Depends on**: TASK-604
+- **Type**: IMPLEMENTATION + TEST_CREATION
+- **Ralph prompt**: |
+    This task extracts pure (non-Figma-dependent) functions from `handlers.ts` into
+    a testable module, then writes unit tests.
+
+    **Step 1: Read the source files**
+    Read `packages/figma-plugin/src/handlers.ts` fully. Identify pure functions:
+    - `base64Encode(bytes: Uint8Array): string` (near top of file, ~lines 23-34)
+    - `base64Decode(str: string): Uint8Array` (near top of file, ~lines 36-50)
+    - Any other validation logic that does not reference `figma` globals
+
+    **Step 2: Create the utility module**
+    Create `packages/figma-plugin/src/handler-utils.ts` containing the exported
+    `base64Encode` and `base64Decode` functions (copy from handlers.ts).
+
+    **Step 3: Update handlers.ts**
+    Replace the inline function definitions in handlers.ts with:
+    ```typescript
+    import { base64Encode, base64Decode } from './handler-utils.js';
+    ```
+    Remove the old function bodies and the `BASE64_CHARS` constant from handlers.ts.
+
+    **Step 4: Create test file**
+    Create `packages/figma-plugin/src/__tests__/handler-utils.test.ts`:
+
+    ```typescript
+    import { describe, it, expect } from 'vitest';
+    import { base64Encode, base64Decode } from '../handler-utils.js';
+
+    describe('base64Encode / base64Decode', () => {
+      it('roundtrips "Hello"', () => {
+        const input = new Uint8Array([72, 101, 108, 108, 111]);
+        const encoded = base64Encode(input);
+        expect(encoded).toBe('SGVsbG8=');
+        const decoded = base64Decode(encoded);
+        expect(Array.from(decoded)).toEqual(Array.from(input));
+      });
+
+      it('handles empty input', () => {
+        const encoded = base64Encode(new Uint8Array([]));
+        expect(encoded).toBe('');
+      });
+
+      it('handles padding (input length not divisible by 3)', () => {
+        const input = new Uint8Array([1, 2]);
+        const encoded = base64Encode(input);
+        expect(encoded).toMatch(/=$/);
+        const decoded = base64Decode(encoded);
+        expect(Array.from(decoded)).toEqual([1, 2]);
+      });
+
+      it('handles single byte', () => {
+        const input = new Uint8Array([255]);
+        const decoded = base64Decode(base64Encode(input));
+        expect(Array.from(decoded)).toEqual([255]);
+      });
+
+      it('handles large arrays (1024 bytes)', () => {
+        const input = new Uint8Array(1024);
+        for (let i = 0; i < 1024; i++) input[i] = i % 256;
+        const decoded = base64Decode(base64Encode(input));
+        expect(Array.from(decoded)).toEqual(Array.from(input));
+      });
+    });
+    ```
+
+    **Step 5: Build and test**
+    ```
+    cd /Users/jarod/Projects/jarod/figma-fast
+    npm run build
+    npx vitest run packages/figma-plugin/src/__tests__/handler-utils.test.ts
+    npm test -- --run
+    ```
+    All must succeed.
+- **Max iterations**: 15
+- **Files affected**: `packages/figma-plugin/src/handler-utils.ts` (NEW), `packages/figma-plugin/src/handlers.ts` (modify), `packages/figma-plugin/src/__tests__/handler-utils.test.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npm run build && npx vitest run packages/figma-plugin/src/__tests__/handler-utils.test.ts && npm test -- --run`
+- **Tests**: TEST-TI-020, TEST-TI-021, TEST-TI-022
+
+### TASK-606: Add tool execution integration tests
+- **Status**: DONE
+- **Depends on**: TASK-601
+- **Type**: TEST_CREATION
+- **Ralph prompt**: |
+    Read `packages/mcp-server/src/__tests__/server.test.ts` for the existing test pattern.
+    Read `packages/mcp-server/src/ws/server.ts` to understand `sendToPlugin` and `isPluginConnected`.
+    Read one tool file (e.g., `packages/mcp-server/src/tools/read-tools.ts`) to see how tools
+    import and call `sendToPlugin`.
+
+    Create `packages/mcp-server/src/__tests__/tool-execution.test.ts`.
+
+    Mock the `ws/server` module before importing tools:
+
+    ```typescript
+    import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+    const mockSendToPlugin = vi.fn();
+    const mockIsPluginConnected = vi.fn();
+
+    vi.mock('../ws/server.js', () => ({
+      sendToPlugin: mockSendToPlugin,
+      isPluginConnected: mockIsPluginConnected,
+      startWsServer: vi.fn(),
+      _resetForTesting: vi.fn(),
+    }));
+
+    import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+    import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+    import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+    import { registerReadTools } from '../tools/read-tools.js';
+    import { registerEditTools } from '../tools/edit-tools.js';
+    import { registerBuildSceneTool } from '../tools/build-scene.js';
+    import { registerFigjamTools } from '../tools/figjam-tools.js';
+    ```
+
+    Write tests for these scenarios (see TESTS.md TEST-TI-030 through TEST-TI-035):
+    1. `get_node_info` happy path -- mock returns success, verify tool output
+    2. `get_node_info` error path -- mock returns failure, verify error surface
+    3. `modify_node` happy path -- verify correct message sent to plugin
+    4. `build_scene` happy path -- verify spec forwarded
+    5. `jam_create_sticky` happy path -- verify FigJam tool works through MCP
+    6. Plugin not connected -- verify NOT_CONNECTED error without calling sendToPlugin
+
+    Each test:
+    - Sets up mockSendToPlugin return value
+    - Calls tool via `client.callTool()`
+    - Asserts on the response content and mock call arguments
+
+    Run: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/mcp-server/src/__tests__/tool-execution.test.ts`
+- **Max iterations**: 15
+- **Files affected**: `packages/mcp-server/src/__tests__/tool-execution.test.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/mcp-server/src/__tests__/tool-execution.test.ts`
+- **Tests**: TEST-TI-030 through TEST-TI-035
+
+### TASK-607: Add scene builder orchestrator tests
+- **Status**: DONE
+- **Depends on**: TASK-601
+- **Type**: TEST_CREATION
+- **Ralph prompt**: |
+    Read `packages/figma-plugin/src/scene-builder/index.ts` fully.
+    Read `packages/figma-plugin/src/scene-builder/build-node.test.ts` for the Figma mock pattern.
+    Read `packages/figma-plugin/src/scene-builder/build-node.ts` for what Figma APIs are called.
+    Read `packages/figma-plugin/src/scene-builder/fonts.ts` for font handling.
+
+    Create `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`.
+
+    Set up the Figma global mock BEFORE importing buildScene. Follow the exact pattern
+    from build-node.test.ts but extend it:
+
+    ```typescript
+    import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+    // Create mock node factory (copy from build-node.test.ts)
+    function createMockNode(type: string, overrides: Record<string, any> = {}) {
+      // ... same as build-node.test.ts
+    }
+
+    const figmaMock: any = {
+      editorType: 'figma',
+      createFrame: () => createMockNode('FRAME'),
+      createText: () => createMockNode('TEXT'),
+      createRectangle: () => createMockNode('RECTANGLE'),
+      createEllipse: () => createMockNode('ELLIPSE'),
+      createLine: () => createMockNode('LINE'),
+      createPolygon: () => createMockNode('POLYGON'),
+      createStar: () => createMockNode('STAR'),
+      createVector: () => createMockNode('VECTOR'),
+      createComponent: () => createMockNode('COMPONENT'),
+      loadFontAsync: vi.fn().mockResolvedValue(undefined),
+      getNodeByIdAsync: vi.fn().mockResolvedValue(null),
+      currentPage: createMockNode('PAGE'),
+      commitUndo: vi.fn(),
+    };
+
+    (globalThis as any).figma = figmaMock;
+
+    // Import AFTER mock
+    import { buildScene } from '../index.js';
+    ```
+
+    Test cases (from TESTS.md TEST-TI-040 through TEST-TI-044):
+    1. Simple FRAME build -- success, nodeCount=1
+    2. Nested nodes (FRAME > TEXT + RECTANGLE) -- nodeCount=3
+    3. FigJam rejects COMPONENT -- success=false, error message
+    4. parentId targeting -- node appended to parent
+    5. Font preloading -- loadFontAsync called for TEXT nodes
+
+    Reset the mock between tests using beforeEach.
+
+    Run: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+- **Max iterations**: 20
+- **Files affected**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts` (NEW)
+- **Verification**: `cd /Users/jarod/Projects/jarod/figma-fast && npx vitest run packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+- **Tests**: TEST-TI-040 through TEST-TI-044

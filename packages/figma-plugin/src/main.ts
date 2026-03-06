@@ -90,6 +90,7 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
         .catch((err) => sendError(msg.id, err));
       break;
 
+    case 'read_node':
     case 'get_node_info':
       handleGetNodeInfo(msg.nodeId as string, msg.depth as number | undefined)
         .then((data) => sendResult(msg.id, data))

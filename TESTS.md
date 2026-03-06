@@ -1,530 +1,688 @@
 # FigmaFast -- Test Specifications
 
-> **Version:** 4.0.0
-> **Last updated:** 2026-02-26
+> **Version:** 6.0.0
+> **Last updated:** 2026-03-06
 > **Framework:** vitest ^4.0.18
 > **All tests use Given/When/Then format**
 > **Status legend:** SPECIFIED | IMPLEMENTED | PASSING | FAILING | EXISTING
 
 ---
 
-## Existing Tests (Baseline)
+## Existing Tests (Baseline -- All Passing)
 
 ### `packages/mcp-server/src/__tests__/server.test.ts`
-- **Status**: EXISTING (6 FAILING -- stale tool count assertions from get_image_fill addition)
+- **Status**: EXISTING (PASSING)
 - **Type**: integration
 - **Framework**: vitest
-- **Count**: 16 tests (10 passing, 6 failing)
-- **Notes**: Tests expect 16/19/22/23/24 tools but actual count is +1 each due to get_image_fill tool added later without updating test assertions.
+- **Count**: 16 tests
+- **Notes**: Tool count assertions were fixed in Sprint 3. Will need updating again after adding jam_* tools.
 
 ### `packages/mcp-server/src/__tests__/ws-server.test.ts`
+- **Status**: EXISTING (FAILING -- 5 tests, IPv6 localhost issue)
+- **Type**: unit/integration
+- **Count**: 9 tests
+- **Notes**: All `ws://localhost:${port}` must become `ws://127.0.0.1:${port}`. Node.js v24+ resolves localhost to ::1 but server binds 127.0.0.1 only.
+
+### `packages/mcp-server/src/__tests__/relay.test.ts`
 - **Status**: EXISTING (PASSING)
-- **Type**: unit
-- **Framework**: vitest
-- **Count**: 2 tests
-- **Notes**: Tests sendToPlugin rejection when no plugin connected and timeout behavior.
+- **Type**: unit/integration
+- **Count**: 22 tests
+
+### `packages/mcp-server/src/__tests__/relay-detached.test.ts`
+- **Status**: EXISTING (PASSING)
+- **Type**: integration
+- **Count**: 7 tests
 
 ### `packages/mcp-server/src/__tests__/schemas.test.ts`
 - **Status**: EXISTING (PASSING)
 - **Type**: unit
-- **Framework**: vitest
-- **Count**: ~20+ tests (schema validation)
+- **Count**: 30 tests
 
 ### `packages/shared/src/__tests__/colors.test.ts`
 - **Status**: EXISTING (PASSING)
 - **Type**: unit
+- **Count**: 11 tests
 
 ### `packages/shared/src/__tests__/fonts.test.ts`
 - **Status**: EXISTING (PASSING)
 - **Type**: unit
+- **Count**: 8 tests
 
 ### `packages/shared/src/__tests__/warnings.test.ts`
 - **Status**: EXISTING (PASSING)
 - **Type**: unit
+- **Count**: 7 tests
+
+### `packages/figma-plugin/src/scene-builder/build-node.test.ts`
+- **Status**: EXISTING (PASSING)
+- **Type**: unit
+- **Framework**: vitest
+- **Count**: 20 tests (approx)
+- **Notes**: Uses Figma global mock pattern. Tests build-node property application.
+
+**Total existing: 130 tests across 9 files (125 passing, 5 failing in ws-server.test.ts).**
 
 ---
 
-## Pre-Work: Fix Stale Test Assertions
+## Phase 1: FigJam Foundation
 
-### TEST-FIX-001: Fix tool count assertions in server.test.ts
+### FigJam Tool Registration Tests
+
+File: `packages/mcp-server/src/__tests__/server.test.ts` (update existing assertions)
+
+#### TEST-FJ-001: MCP server registers all jam_* tools
 - **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: critical (blocking -- must pass before new work)
+- **Type**: integration
+- **Priority**: critical
 - **File**: `packages/mcp-server/src/__tests__/server.test.ts`
 
-GIVEN the server.test.ts file has hardcoded tool counts (16, 19, 22, 23, 24)
-WHEN get_image_fill was added as tool #27 (actually registered as part of read-tools alongside export_node_as_image)
-THEN the expected counts are each off by 1 (should be 17, 20, 23, 24, 25, 26 respectively for each phase grouping)
-AND after fixing, all 74 tests pass
+GIVEN the MCP server is created with all tool registrations including `registerFigjamTools`
+WHEN the server's tool list is inspected
+THEN it includes `jam_create_sticky`, `jam_create_connector`, `jam_create_shape`, `jam_create_code_block`, `jam_create_table`, `jam_get_timer`
+AND the total tool count is previous count + 6
+
+### FigJam Message Type Tests
+
+File: `packages/mcp-server/src/__tests__/schemas.test.ts` (extend)
+
+#### TEST-FJ-002: FigJam Zod schemas validate correct input
+- **Status**: SPECIFIED
+- **Type**: unit
+- **Priority**: critical
+- **File**: `packages/mcp-server/src/__tests__/schemas.test.ts`
+
+GIVEN the FigJam tool Zod schemas (JamStickySchema, JamConnectorSchema, JamShapeSchema, JamCodeBlockSchema, JamTableSchema)
+WHEN valid parameters are parsed:
+  - JamStickySchema: `{ text: "Hello", color: "YELLOW" }`
+  - JamConnectorSchema: `{ startNodeId: "1:2", endNodeId: "3:4" }`
+  - JamShapeSchema: `{ shapeType: "DIAMOND", text: "Decision" }`
+  - JamCodeBlockSchema: `{ code: "const x = 1;", language: "JAVASCRIPT" }`
+  - JamTableSchema: `{ numRows: 3, numCols: 4 }`
+THEN all parse successfully without errors
+
+#### TEST-FJ-003: FigJam Zod schemas reject invalid input
+- **Status**: SPECIFIED
+- **Type**: unit
+- **Priority**: high
+- **File**: `packages/mcp-server/src/__tests__/schemas.test.ts`
+
+GIVEN the FigJam tool Zod schemas
+WHEN invalid parameters are parsed:
+  - JamStickySchema with missing `text`: `{ color: "YELLOW" }`
+  - JamConnectorSchema with no endpoints: `{}`
+  - JamShapeSchema with invalid shapeType: `{ shapeType: "INVALID" }`
+  - JamTableSchema with zero rows: `{ numRows: 0, numCols: 3 }`
+THEN all throw ZodError with descriptive messages
+
+### FigJam Guard Tests
+
+These tests verify that Figma-only tools return clear errors in FigJam context.
+Since plugin handlers run in the Figma sandbox (not testable with vitest), we test
+the MCP tool layer behavior by verifying that error messages from the plugin are
+properly surfaced. The guard logic itself is tested via manual acceptance.
+
+#### TEST-FJ-010: Guarded tools are documented
+- **Status**: SPECIFIED
+- **Type**: documentation
+- **Priority**: high
+
+GIVEN the following tools are Figma-only and do not work in FigJam:
+  1. `create_page` (figma.createPage not available)
+  2. `convert_to_component` (figma.createComponent not available)
+  3. `combine_as_variants` (figma.combineAsVariants not available)
+  4. `manage_component_properties` (requires COMPONENT/COMPONENT_SET)
+  5. `create_paint_style` (figma.createPaintStyle not available)
+  6. `create_text_style` (figma.createTextStyle not available)
+  7. `create_effect_style` (figma.createEffectStyle not available)
+  8. `boolean_operation` (figma.union/subtract/intersect/exclude not available)
+  9. `get_local_components` (no components in FigJam)
+THEN each handler checks `figma.editorType === 'figjam'` and throws:
+  `"Not supported in FigJam: <tool_name> is only available in Figma design files."`
+
+### FigJam Serialization Tests
+
+These verify that the serializer extracts FigJam-specific properties. Since
+serialize-node.ts runs in the Figma sandbox, we cannot unit test it with vitest.
+These are behavioral specs for manual acceptance testing.
+
+#### TEST-FJ-020: Serialize StickyNode
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN a StickyNode exists in the FigJam file with text "Hello World" and authorVisible=true
+WHEN `serializeNode(stickyNode, 0)` is called
+THEN the result includes:
+  - `type: "STICKY"`
+  - `text: "Hello World"`
+  - `authorVisible: true`
+  - Standard properties: id, name, x, y, width, height, fills
+
+#### TEST-FJ-021: Serialize ConnectorNode
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN a ConnectorNode exists connecting node A (id "1:2") to node B (id "3:4")
+WHEN `serializeNode(connectorNode, 0)` is called
+THEN the result includes:
+  - `type: "CONNECTOR"`
+  - `connectorStart: { endpointNodeId: "1:2", ... }`
+  - `connectorEnd: { endpointNodeId: "3:4", ... }`
+  - `connectorStartStrokeCap: string`
+  - `connectorEndStrokeCap: string`
+
+#### TEST-FJ-022: Serialize ShapeWithTextNode
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN a ShapeWithTextNode with shapeType "DIAMOND" and text "Decision"
+WHEN `serializeNode(shapeWithTextNode, 0)` is called
+THEN the result includes:
+  - `type: "SHAPE_WITH_TEXT"`
+  - `shapeType: "DIAMOND"`
+  - `text: "Decision"`
+
+#### TEST-FJ-023: Serialize CodeBlockNode
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN a CodeBlockNode with code "const x = 1;" and language "JAVASCRIPT"
+WHEN `serializeNode(codeBlockNode, 0)` is called
+THEN the result includes:
+  - `type: "CODE_BLOCK"`
+  - `code: "const x = 1;"`
+  - `codeLanguage: "JAVASCRIPT"`
+
+#### TEST-FJ-024: Serialize TableNode
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN a TableNode with 3 rows and 4 columns
+WHEN `serializeNode(tableNode, 0)` is called
+THEN the result includes:
+  - `type: "TABLE"`
+  - `numRows: 3`
+  - `numColumns: 4`
+  - `children` contains cell summaries
+
+#### TEST-FJ-025: get_document_info includes editorType
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN the plugin is running in a FigJam file
+WHEN `get_document_info` is called
+THEN the response includes `editorType: "figjam"`
+AND when running in a Figma design file, the response includes `editorType: "figma"`
+
+### Build Scene Pre-Flight Tests
+
+#### TEST-FJ-030: build_scene rejects COMPONENT in FigJam
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN the plugin is running in a FigJam file
+WHEN `build_scene` is called with a spec containing `{ type: "COMPONENT", name: "Button", children: [...] }`
+THEN the build fails immediately with error:
+  `"FigJam does not support the following node types: COMPONENT. Use Figma design files for components."`
+AND no partial nodes are created
+
+#### TEST-FJ-031: build_scene allows FRAME/TEXT/RECTANGLE in FigJam
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+WHEN `build_scene` is called with a spec containing only FRAME, TEXT, and RECTANGLE nodes
+THEN the build succeeds normally
+AND all nodes are created on the FigJam canvas
+
+#### TEST-FJ-032: build_scene rejects nested unsupported types in FigJam
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+WHEN `build_scene` is called with a FRAME containing a nested COMPONENT_INSTANCE child
+THEN the build fails with error listing "COMPONENT_INSTANCE" as unsupported
+AND no nodes are created
 
 ---
 
-## Phase 1: WS Relay with Multi-Client Registration
+## Phase 2: FigJam Tools
 
-### Relay Server Tests
+### jam_create_sticky Tests
 
-File: `packages/mcp-server/src/__tests__/relay.test.ts`
-
-#### TEST-R-001: Relay server starts and listens on specified port
+#### TEST-JAM-001: Create sticky with text and default color
 - **Status**: SPECIFIED
-- **Type**: unit
+- **Type**: e2e (manual)
 - **Priority**: critical
 
-GIVEN no process is listening on port P (random high port)
-WHEN a new WsRelay is created with port P
-THEN the relay WebSocketServer is listening on port P
-AND a WebSocket client can connect to ws://localhost:P
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_sticky` is called with `{ text: "TODO: Review PR" }`
+THEN a StickyNode is created on the current page
+AND the sticky text is "TODO: Review PR"
+AND the sticky has default yellow color
+AND the response includes `{ nodeId, name, type: "STICKY" }`
 
-#### TEST-R-002: Relay identifies plugin connection via hello handshake
+#### TEST-JAM-002: Create sticky with specified color
 - **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: critical
-
-GIVEN a relay is running on port P
-WHEN a WebSocket client connects and sends `{ type: "hello", ts: <timestamp> }`
-THEN the relay identifies this connection as the Figma plugin
-AND the relay's internal pluginSocket is set to this connection
-
-#### TEST-R-003: Relay identifies MCP client via register handshake
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: critical
-
-GIVEN a relay is running on port P
-WHEN a WebSocket client connects and sends `{ type: "register", clientId: "uuid-1", clientName: "Claude Desktop" }`
-THEN the relay adds this client to its registry with clientId "uuid-1" and clientName "Claude Desktop"
-AND the registry has exactly 1 client
-
-#### TEST-R-004: First registered client is designated active
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: critical
-
-GIVEN a relay is running with no clients registered
-WHEN a client registers with clientName "Claude Desktop"
-THEN the relay designates this client as active
-AND the relay's activeClientId equals the registered clientId
-
-#### TEST-R-005: Second registered client is designated inactive
-- **Status**: SPECIFIED
-- **Type**: unit
+- **Type**: e2e (manual)
 - **Priority**: high
 
-GIVEN a relay is running with one active client "Claude Desktop"
-WHEN a second client registers with clientName "Claude Code"
-THEN "Claude Code" is added to the registry as inactive
-AND the active client remains "Claude Desktop"
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_sticky` is called with `{ text: "Done", color: "GREEN" }`
+THEN a StickyNode is created with green background color
+AND the text is "Done"
 
-#### TEST-R-006: Active client messages forwarded to plugin
+#### TEST-JAM-003: Create sticky with position
 - **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a relay with active client "Claude Desktop" and plugin connected
-WHEN "Claude Desktop" sends `{ type: "ping", id: "abc-123" }`
-THEN the plugin receives `{ type: "ping", id: "abc-123" }`
-
-#### TEST-R-007: Plugin responses forwarded back to originating client
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a relay with active client "Claude Desktop" and plugin connected
-AND "Claude Desktop" has sent a message with id "abc-123"
-WHEN the plugin sends `{ type: "pong", id: "abc-123" }`
-THEN "Claude Desktop" receives `{ type: "pong", id: "abc-123" }`
-
-#### TEST-R-008: Inactive client messages rejected immediately
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a relay with active client "Claude Desktop" and inactive client "Claude Code"
-WHEN "Claude Code" sends `{ type: "ping", id: "xyz-789" }`
-THEN "Claude Code" receives an error response within 100ms
-AND the error response has `{ type: "result", id: "xyz-789", success: false }`
-AND the error message contains "Another client is currently active"
-AND the error message contains "Claude Desktop"
-
-#### TEST-R-009: Client disconnect removes from registry
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: high
-
-GIVEN a relay with two registered clients "A" and "B"
-WHEN client "B" disconnects (WebSocket close)
-THEN the registry has exactly 1 client
-AND client "A" remains in the registry
-
-#### TEST-R-010: Active client disconnect does not auto-promote in Slice 2 mode
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: high
-
-GIVEN a relay with active client "A" and inactive client "B"
-WHEN active client "A" disconnects
-THEN the relay has no active client (activeClientId is null)
-AND client "B" remains registered but inactive
-
-NOTE: In Phase 1 (without plugin UI), auto-promotion on next command is acceptable. This test validates the Slice 2 behavior where the user must choose.
-
-#### TEST-R-011: Messages to plugin when plugin not connected return error
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: high
-
-GIVEN a relay with an active client "Claude Desktop" but no plugin connected
-WHEN "Claude Desktop" sends `{ type: "ping", id: "abc-123" }`
-THEN "Claude Desktop" receives an error response with "Figma plugin is not connected"
-
-#### TEST-R-012: Plugin disconnect rejects pending requests
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
-
-GIVEN a relay with active client and plugin connected
-AND a message with id "abc-123" has been forwarded to the plugin
-WHEN the plugin disconnects before responding
-THEN the active client receives an error for id "abc-123" with "Plugin disconnected"
-
-#### TEST-R-013: Relay handles malformed messages without crashing
-- **Status**: SPECIFIED
-- **Type**: unit
+- **Type**: e2e (manual)
 - **Priority**: medium
 
-GIVEN a relay is running with connections
-WHEN a connection sends invalid JSON (e.g., "not json at all")
-THEN the relay logs an error
-AND the relay continues running
-AND other connections remain functional
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_sticky` is called with `{ text: "Note", x: 100, y: 200 }`
+THEN the sticky is positioned at (100, 200)
 
-#### TEST-R-014: Relay graceful shutdown closes all connections
+#### TEST-JAM-004: Create sticky fails gracefully in Figma (not FigJam)
 - **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: medium
-
-GIVEN a relay with 2 clients and 1 plugin connected
-WHEN the relay's close() method is called
-THEN all WebSocket connections are closed
-AND the WebSocketServer stops listening
-
-#### TEST-R-015: Plugin reconnect after disconnect is seamless
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: medium
-
-GIVEN a relay with active client and plugin connected
-WHEN the plugin disconnects and then reconnects (new WebSocket, sends hello)
-THEN the relay replaces the plugin socket
-AND subsequent messages from the active client are forwarded to the new plugin connection
-
-### Server.ts Refactored Tests
-
-File: `packages/mcp-server/src/__tests__/ws-server.test.ts` (extend existing)
-
-#### TEST-S-001: startWsServer starts relay when no relay exists
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN no process is listening on port P
-WHEN startWsServer(P) is called with clientName "Test Client"
-THEN a WS relay is started on port P
-AND the MCP server is connected to the relay as a client
-AND the client is registered with clientName "Test Client"
-
-#### TEST-S-002: startWsServer connects to existing relay
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a WS relay is already running on port P
-WHEN startWsServer(P) is called with clientName "Second Client"
-THEN the MCP server connects to the existing relay
-AND the client is registered with clientName "Second Client"
-AND no new relay is started (port P is not re-bound)
-
-#### TEST-S-003: sendToPlugin works through relay (end-to-end)
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN startWsServer(P) has been called and a mock plugin is connected to the relay
-WHEN sendToPlugin({ type: "ping" }) is called
-THEN the mock plugin receives the ping message
-AND when the mock plugin responds with pong, sendToPlugin resolves with the pong
-
-#### TEST-S-004: sendToPlugin rejects when client is inactive
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN relay is running with a first active client
-AND startWsServer(P) is called for a second client (now inactive)
-WHEN sendToPlugin({ type: "ping" }) is called from the second client
-THEN sendToPlugin rejects with an error containing "Another client is currently active"
-
-#### TEST-S-005: isPluginConnected reflects relay state
-- **Status**: SPECIFIED
-- **Type**: integration
+- **Type**: e2e (manual)
 - **Priority**: high
 
-GIVEN startWsServer(P) has been called and the relay is running
-WHEN no plugin has connected to the relay
-THEN isPluginConnected() returns false
-AND when a mock plugin connects and sends hello
-THEN isPluginConnected() returns true
+GIVEN the plugin is running in a Figma design file (not FigJam)
+WHEN `jam_create_sticky` is called
+THEN it returns an error: "jam_create_sticky is only available in FigJam files."
 
-#### TEST-S-006: Race condition -- two processes start simultaneously
+### jam_create_connector Tests
+
+#### TEST-JAM-010: Create connector between two nodes
 - **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
+- **Type**: e2e (manual)
+- **Priority**: critical
 
-GIVEN no process is listening on port P
-WHEN two startWsServer(P) calls are initiated concurrently (simulated with Promises)
-THEN one succeeds as relay host and the other connects as client
-AND both are registered in the relay
-AND no unhandled errors are thrown
+GIVEN the plugin is running in a FigJam file with two stickies (nodeA, nodeB)
+WHEN `jam_create_connector` is called with `{ startNodeId: nodeA.id, endNodeId: nodeB.id }`
+THEN a ConnectorNode is created connecting the two stickies
+AND `connectorStart.endpointNodeId` equals nodeA.id
+AND `connectorEnd.endpointNodeId` equals nodeB.id
+AND the response includes `{ nodeId, type: "CONNECTOR" }`
 
-#### TEST-S-007: sendToPlugin latency through relay is under 5ms overhead
+#### TEST-JAM-011: Create connector with stroke caps
 - **Status**: SPECIFIED
-- **Type**: performance
-- **Priority**: high
-
-GIVEN relay is running with active client and mock plugin that immediately responds to ping
-WHEN sendToPlugin({ type: "ping" }) is called 10 times
-THEN the average additional latency (vs direct WS connection baseline) is under 5ms
-
-### Relay Message Type Tests
-
-File: `packages/shared/src/__tests__/messages.test.ts` (new)
-
-#### TEST-M-001: Relay message types are correctly defined
-- **Status**: SPECIFIED
-- **Type**: unit
+- **Type**: e2e (manual)
 - **Priority**: medium
 
-GIVEN the shared messages module
-WHEN imported
-THEN RelayToClientMessage, ClientToRelayMessage, and PluginToRelayMessage types exist
-AND they include: register, client_list, set_active_client, activated, deactivated, relay_error
+GIVEN the plugin is running in a FigJam file with two nodes
+WHEN `jam_create_connector` is called with `{ startNodeId: "...", endNodeId: "...", endStrokeCap: "ARROW_LINES" }`
+THEN the connector end has an arrow cap
+
+#### TEST-JAM-012: Create connector with invalid node IDs returns error
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_connector` is called with `{ startNodeId: "999:999", endNodeId: "888:888" }`
+THEN it returns an error about nodes not found
+
+### jam_create_shape Tests
+
+#### TEST-JAM-020: Create shape with text
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_shape` is called with `{ shapeType: "DIAMOND", text: "Decision Point" }`
+THEN a ShapeWithTextNode is created with diamond shape
+AND the shape text is "Decision Point"
+AND the response includes `{ nodeId, type: "SHAPE_WITH_TEXT", shapeType: "DIAMOND" }`
+
+#### TEST-JAM-021: Create shape with valid shape types
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_shape` is called with each valid shapeType:
+  SQUARE, ELLIPSE, DIAMOND, TRIANGLE_UP, TRIANGLE_DOWN, PARALLELOGRAM_RIGHT, PARALLELOGRAM_LEFT, ENG_DATABASE, ENG_QUEUE, ENG_FILE, ENG_FOLDER
+THEN each creates a valid ShapeWithTextNode with the correct shapeType
+
+### jam_create_code_block Tests
+
+#### TEST-JAM-030: Create code block with code and language
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_code_block` is called with `{ code: "function hello() { return 'world'; }", language: "JAVASCRIPT" }`
+THEN a CodeBlockNode is created
+AND `codeBlockNode.code` equals the provided code string
+AND `codeBlockNode.codeLanguage` equals "JAVASCRIPT"
+AND the response includes `{ nodeId, type: "CODE_BLOCK" }`
+
+#### TEST-JAM-031: Create code block with default language
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: medium
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_code_block` is called with `{ code: "print('hello')" }` (no language specified)
+THEN a CodeBlockNode is created with `codeLanguage` set to "PLAIN" (or the API default)
+
+### jam_create_table Tests
+
+#### TEST-JAM-040: Create empty table
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: critical
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_table` is called with `{ numRows: 3, numCols: 4 }`
+THEN a TableNode is created with 3 rows and 4 columns
+AND the response includes `{ nodeId, type: "TABLE", numRows: 3, numColumns: 4 }`
+
+#### TEST-JAM-041: Create table with cell data
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_table` is called with:
+  `{ numRows: 2, numCols: 2, cellData: [["Name", "Age"], ["Alice", "30"]] }`
+THEN a TableNode is created
+AND cell (0,0) contains "Name", cell (0,1) contains "Age"
+AND cell (1,0) contains "Alice", cell (1,1) contains "30"
+
+#### TEST-JAM-042: Create table with partial cell data
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: medium
+
+GIVEN the plugin is running in a FigJam file
+WHEN `jam_create_table` is called with:
+  `{ numRows: 3, numCols: 3, cellData: [["Header"]] }`
+THEN a TableNode is created with 3x3 dimensions
+AND cell (0,0) contains "Header"
+AND remaining cells are empty (no error thrown)
+
+### jam_get_timer Tests
+
+#### TEST-JAM-050: Get timer state when no timer is running
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a FigJam file
+AND no timer has been started
+WHEN `jam_get_timer` is called
+THEN the response includes timer state information (null/stopped state)
+
+#### TEST-JAM-051: Get timer state when timer is running
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: medium
+
+GIVEN the plugin is running in a FigJam file
+AND a timer has been started manually by the user
+WHEN `jam_get_timer` is called
+THEN the response includes `{ remaining, totalDuration, isRunning: true }`
+
+#### TEST-JAM-052: jam_get_timer fails gracefully in Figma
+- **Status**: SPECIFIED
+- **Type**: e2e (manual)
+- **Priority**: high
+
+GIVEN the plugin is running in a Figma design file (not FigJam)
+WHEN `jam_get_timer` is called
+THEN it returns an error: "jam_get_timer is only available in FigJam files."
 
 ---
 
-## Phase 2: Plugin UI Client Picker
-
-### Relay Broadcast Tests
-
-File: `packages/mcp-server/src/__tests__/relay.test.ts` (extend)
-
-#### TEST-R-020: Relay broadcasts client_list to plugin on client connect
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a relay with plugin connected and one active client "Claude Desktop"
-WHEN a second client "Claude Code" registers
-THEN the plugin receives a `client_list` message with 2 clients
-AND "Claude Desktop" has isActive: true
-AND "Claude Code" has isActive: false
-
-#### TEST-R-021: Relay broadcasts client_list on client disconnect
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
-
-GIVEN a relay with plugin connected and two clients
-WHEN the inactive client disconnects
-THEN the plugin receives an updated `client_list` with 1 client
-
-#### TEST-R-022: set_active_client switches the active client
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a relay with active client "A" (clientId: id-A) and inactive client "B" (clientId: id-B) and plugin connected
-WHEN the plugin sends `{ type: "set_active_client", clientId: "id-B" }`
-THEN the relay sets client "B" as active and client "A" as inactive
-AND the plugin receives an updated client_list with "B" active
-AND client "B" receives `{ type: "activated" }`
-AND client "A" receives `{ type: "deactivated", reason: "User switched to 'B-name'" }`
-
-#### TEST-R-023: set_active_client with invalid clientId is ignored
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: medium
-
-GIVEN a relay with active client "A" and plugin connected
-WHEN the plugin sends `{ type: "set_active_client", clientId: "nonexistent" }`
-THEN the active client remains "A"
-AND no error is thrown
-
-#### TEST-R-024: Commands route to newly active client after switch
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN relay with clients "A" (active) and "B" (inactive) and plugin connected
-AND active client is switched to "B"
-WHEN "B" sends a ping message
-THEN the plugin receives the ping
-AND when "A" sends a ping message, "A" receives rejection error
-
-#### TEST-R-025: Active client disconnect shows no active client in client_list
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
-
-GIVEN relay with clients "A" (active) and "B" (inactive) and plugin connected
-WHEN "A" disconnects
-THEN the plugin receives client_list with 1 client "B" with isActive: false
-AND no client is auto-promoted
-
-#### TEST-R-026: Response routing uses correlation ID (not active status)
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
-
-GIVEN relay with active client "A" and plugin connected
-AND "A" sends message with id "msg-1" which is forwarded to plugin
-WHEN active client is switched to "B" BEFORE plugin responds
-AND plugin then responds with `{ type: "result", id: "msg-1", success: true }`
-THEN client "A" receives the response (not "B")
-
-### Plugin UI Tests
-
-These are behavioral specifications for manual verification. The plugin UI runs in Figma's sandbox and cannot be unit tested with vitest. Test specifications are written for manual acceptance testing.
-
-#### TEST-UI-001: Plugin UI displays connected clients
-- **Status**: SPECIFIED
-- **Type**: e2e (manual)
-- **Priority**: critical
-
-GIVEN two MCP clients are connected to the relay
-AND the Figma plugin is open and connected
-THEN the plugin UI shows both clients in a list below the connection status
-AND each client shows its name and a selection indicator
-AND the active client has a filled radio button
-
-#### TEST-UI-002: Plugin UI updates when client connects
-- **Status**: SPECIFIED
-- **Type**: e2e (manual)
-- **Priority**: high
-
-GIVEN the plugin UI shows one active client
-WHEN a second MCP server starts and connects
-THEN the client list updates within 500ms to show both clients
-AND no page refresh or reconnect is needed
-
-#### TEST-UI-003: Plugin UI allows switching active client
-- **Status**: SPECIFIED
-- **Type**: e2e (manual)
-- **Priority**: critical
-
-GIVEN the plugin UI shows two clients with "Claude Desktop" active
-WHEN the user clicks on "Claude Code"
-THEN "Claude Code" becomes the active client (filled radio)
-AND "Claude Desktop" becomes inactive (empty radio)
-AND commands from Claude Code now reach the plugin
-
-#### TEST-UI-004: Plugin UI handles no clients state
-- **Status**: SPECIFIED
-- **Type**: e2e (manual)
-- **Priority**: medium
-
-GIVEN the relay is running but no MCP clients are connected
-THEN the plugin UI shows "No AI clients connected" in the client area
-
-#### TEST-UI-005: Plugin UI handles active client disconnection
-- **Status**: SPECIFIED
-- **Type**: e2e (manual)
-- **Priority**: high
-
-GIVEN two clients are shown, "Claude Desktop" is active
-WHEN "Claude Desktop" disconnects (process exits)
-THEN "Claude Desktop" disappears from the list
-AND "Claude Code" is shown but NOT auto-activated
-AND a notice prompts the user to select a client
-
 ---
 
-## Phase 3: Resilient Relay
+## Phase 4: Testing Infrastructure
 
-File: `packages/mcp-server/src/__tests__/relay-detached.test.ts` (new)
+### 4A: Fix Failing Tests + Infrastructure
 
-#### TEST-D-001: Relay starts as detached child process
+#### TEST-TI-001: ws-server tests pass after IPv4 fix
 - **Status**: SPECIFIED
-- **Type**: integration
+- **Type**: unit/integration (fix)
 - **Priority**: critical
+- **File**: `packages/mcp-server/src/__tests__/ws-server.test.ts`
 
-GIVEN no relay is running
-WHEN the MCP server starts and triggers relay creation
-THEN a separate child process is forked with detached: true
-AND the child process is running and listening on port P
-AND the parent process can exit without killing the child
+GIVEN all 8 occurrences of `ws://localhost:${port}` in ws-server.test.ts are replaced with `ws://127.0.0.1:${port}`
+WHEN the test suite is run with `npx vitest run packages/mcp-server/src/__tests__/ws-server.test.ts`
+THEN all 9 tests in ws-server.test.ts pass
+AND no other test files are affected
 
-#### TEST-D-002: PID file is created on relay startup
+#### TEST-TI-002: Coverage reporting works
+- **Status**: SPECIFIED
+- **Type**: infrastructure
+- **Priority**: high
+- **File**: `vitest.config.ts`, `package.json`
+
+GIVEN vitest.config.ts has `coverage: { provider: 'v8', reporter: ['text', 'lcov'], exclude: ['**/node_modules/**', '**/*.test.ts'] }`
+AND package.json has script `"test:coverage": "vitest run --coverage"`
+AND `@vitest/coverage-v8` is installed as a devDependency
+WHEN `npm run test:coverage` is executed
+THEN a text coverage summary is printed to stdout
+AND an `lcov.info` file is generated in `coverage/` directory
+AND test files (*.test.ts) are excluded from coverage metrics
+
+#### TEST-TI-003: GitHub Actions CI workflow runs
+- **Status**: SPECIFIED
+- **Type**: infrastructure
+- **Priority**: high
+- **File**: `.github/workflows/ci.yml`
+
+GIVEN `.github/workflows/ci.yml` exists
+AND it triggers on push to main and pull_request to main
+WHEN a push or PR is created
+THEN the workflow installs dependencies with `npm ci`
+AND builds all packages with `npm run build`
+AND runs the test suite with `npm test`
+AND runs the linter with `npm run lint`
+AND uses Node.js 24.x
+
+### 4B: Contract + Logic Tests
+
+#### TEST-TI-010: Protocol contract -- all message types have handlers
+- **Status**: SPECIFIED
+- **Type**: unit (static analysis)
+- **Priority**: high
+- **File**: `packages/shared/src/__tests__/protocol-contract.test.ts` (NEW)
+
+GIVEN the `ServerToPluginMessage` union type in `packages/shared/src/messages.ts`
+AND the switch statement in `packages/figma-plugin/src/main.ts`
+WHEN both files are read and the message type strings are extracted
+THEN every `type:` literal in the `ServerToPluginMessage` union has a matching `case` in the switch
+AND every `case` in the switch (except `default`) corresponds to a type in the union
+AND the test lists any mismatches clearly in the failure message
+
+#### TEST-TI-011: Protocol contract -- detects missing handler (negative)
+- **Status**: SPECIFIED
+- **Type**: unit (static analysis)
+- **Priority**: medium
+- **File**: `packages/shared/src/__tests__/protocol-contract.test.ts`
+
+GIVEN a synthetic test scenario where the extracted types and cases are compared
+WHEN one type is present in messages.ts but absent from main.ts cases
+THEN the contract test fails with a message identifying the missing case
+
+#### TEST-TI-020: Pure handler validation -- modify_node property validation
 - **Status**: SPECIFIED
 - **Type**: unit
 - **Priority**: high
+- **File**: `packages/figma-plugin/src/__tests__/handler-utils.test.ts` (NEW)
 
-GIVEN no relay is running and no PID file exists
-WHEN a detached relay process starts
-THEN a PID file is written to `<tmpdir>/figma-fast-relay.pid`
-AND the file contains the relay process PID as a decimal string
+GIVEN pure validation functions are extracted from handlers.ts
+WHEN `validateModifyNodeProperties({fills: [{type: 'SOLID', color: '#FF0000'}]})` is called
+THEN it returns the validated/transformed properties without error
+AND when invalid properties `{fills: 'not-an-array'}` are passed
+THEN it throws a descriptive validation error
 
-#### TEST-D-003: Relay auto-exits after idle timeout
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN a detached relay is running with no connections
-WHEN the idle timeout (configurable, default 60s, set to 2s for test) elapses
-THEN the relay process exits
-AND the PID file is removed
-
-#### TEST-D-004: Relay survives parent process exit
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: critical
-
-GIVEN MCP process A started the detached relay and MCP process B is connected
-WHEN MCP process A exits (simulated by disconnecting from relay)
-THEN the relay continues running
-AND MCP process B remains connected and can send/receive messages
-
-#### TEST-D-005: Stale PID file is detected and cleaned up
-- **Status**: SPECIFIED
-- **Type**: unit
-- **Priority**: high
-
-GIVEN a PID file exists containing PID 99999 (not a running process)
-AND no relay is listening on the port
-WHEN a new MCP server starts
-THEN it detects the stale PID file
-AND removes the stale PID file
-AND starts a new detached relay
-
-#### TEST-D-006: New MCP process connects to existing detached relay
-- **Status**: SPECIFIED
-- **Type**: integration
-- **Priority**: high
-
-GIVEN a detached relay is running (started by a previous MCP process)
-WHEN a new MCP process starts
-THEN it detects the relay is running (port is occupied)
-AND connects as a client without starting a new relay
-
-#### TEST-D-007: PID file is cleaned up on graceful relay shutdown
+#### TEST-TI-021: Pure handler logic -- base64 encode/decode roundtrip
 - **Status**: SPECIFIED
 - **Type**: unit
 - **Priority**: medium
+- **File**: `packages/figma-plugin/src/__tests__/handler-utils.test.ts`
 
-GIVEN a detached relay is running with a PID file
-WHEN the relay receives SIGTERM
-THEN it closes all connections gracefully
-AND removes the PID file
-AND exits
+GIVEN the base64Encode and base64Decode functions are extracted from handlers.ts
+WHEN a Uint8Array is encoded then decoded
+THEN the result matches the original byte array
+AND when an empty array is encoded
+THEN the result is an empty string
+AND when a string with padding is decoded
+THEN the padding is handled correctly
+
+#### TEST-TI-022: Pure handler logic -- color conversion integration
+- **Status**: SPECIFIED
+- **Type**: unit
+- **Priority**: medium
+- **File**: `packages/figma-plugin/src/__tests__/handler-utils.test.ts`
+
+GIVEN the property transformation logic extracted from handleModifyNode
+WHEN color properties like `{ fills: [{ type: 'SOLID', color: '#FF0000' }] }` are processed
+THEN the hex color is converted to RGBA format `{ r: 1, g: 0, b: 0, a: 1 }`
+
+### 4C: Integration + Orchestrator Tests
+
+#### TEST-TI-030: Tool execution -- get_node_info happy path
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: critical
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts` (extend)
+
+GIVEN the MCP server is running with all tools registered
+AND `sendToPlugin` is mocked to return `{ type: 'result', id: '<id>', success: true, data: { id: '1:2', name: 'Frame', type: 'FRAME' } }`
+WHEN the `get_node_info` tool is called via MCP client with `{ nodeId: '1:2' }`
+THEN the tool returns content containing the node info JSON
+AND `sendToPlugin` was called with `{ type: 'get_node_info', id: expect.any(String), nodeId: '1:2' }`
+
+#### TEST-TI-031: Tool execution -- get_node_info error path
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: high
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts`
+
+GIVEN the MCP server is running
+AND `sendToPlugin` is mocked to return `{ type: 'result', id: '<id>', success: false, error: 'Node not found: 999:999' }`
+WHEN the `get_node_info` tool is called with `{ nodeId: '999:999' }`
+THEN the tool returns content with isError: true containing the error message
+
+#### TEST-TI-032: Tool execution -- modify_node happy path
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: critical
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts`
+
+GIVEN the MCP server is running
+AND `sendToPlugin` is mocked to return a success result
+WHEN `modify_node` is called with `{ nodeId: '1:2', properties: { name: 'Updated' } }`
+THEN the tool returns success content
+AND `sendToPlugin` was called with the correct message structure
+
+#### TEST-TI-033: Tool execution -- build_scene happy path
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: critical
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts`
+
+GIVEN the MCP server is running
+AND `sendToPlugin` is mocked to return a success result with `{ rootNodeId: '1:5', nodeCount: 3 }`
+WHEN `build_scene` is called with a simple spec `{ type: 'FRAME', name: 'Container', children: [] }`
+THEN the tool returns content containing the root node ID and node count
+
+#### TEST-TI-034: Tool execution -- jam_create_sticky happy path
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: high
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts`
+
+GIVEN the MCP server is running
+AND `sendToPlugin` is mocked to return `{ type: 'result', success: true, data: { nodeId: '5:1', type: 'STICKY' } }`
+WHEN `jam_create_sticky` is called with `{ text: 'Hello' }`
+THEN the tool returns content containing the sticky node info
+
+#### TEST-TI-035: Tool execution -- plugin not connected
+- **Status**: SPECIFIED
+- **Type**: integration
+- **Priority**: high
+- **File**: `packages/mcp-server/src/__tests__/server.test.ts`
+
+GIVEN the MCP server is running
+AND `isPluginConnected()` returns false
+WHEN any tool (e.g., `get_node_info`) is called
+THEN the tool returns content with the NOT_CONNECTED error message
+AND `sendToPlugin` is NOT called
+
+#### TEST-TI-040: Scene builder orchestrator -- simple FRAME build
+- **Status**: SPECIFIED
+- **Type**: unit (with Figma mock)
+- **Priority**: critical
+- **File**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts` (NEW)
+
+GIVEN the Figma global mock is installed (following build-node.test.ts pattern)
+AND `figma.currentPage` has an empty children array
+WHEN `buildScene({ type: 'FRAME', name: 'Test', width: 200, height: 100, children: [] })` is called
+THEN the result has `success: true`
+AND `rootNodeId` is a non-empty string
+AND `nodeCount` is 1
+AND `errors` is an empty array
+
+#### TEST-TI-041: Scene builder orchestrator -- nested nodes
+- **Status**: SPECIFIED
+- **Type**: unit (with Figma mock)
+- **Priority**: high
+- **File**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+
+GIVEN the Figma global mock is installed
+WHEN `buildScene` is called with a FRAME containing a TEXT child and a RECTANGLE child
+THEN the result has `success: true`
+AND `nodeCount` is 3
+AND the nodeIdMap contains entries for all three nodes
+
+#### TEST-TI-042: Scene builder orchestrator -- FigJam rejects COMPONENT
+- **Status**: SPECIFIED
+- **Type**: unit (with Figma mock)
+- **Priority**: high
+- **File**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+
+GIVEN the Figma global mock has `editorType: 'figjam'`
+WHEN `buildScene({ type: 'COMPONENT', name: 'Button', children: [] })` is called
+THEN the result has `success: false`
+AND `errors` contains a message about FigJam not supporting COMPONENT type
+AND `nodeCount` is 0
+
+#### TEST-TI-043: Scene builder orchestrator -- parentId targeting
+- **Status**: SPECIFIED
+- **Type**: unit (with Figma mock)
+- **Priority**: medium
+- **File**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+
+GIVEN the Figma global mock is installed
+AND a parent node with id 'parent-1' exists (returned by `figma.getNodeByIdAsync`)
+WHEN `buildScene({ type: 'FRAME', name: 'Child', children: [] }, 'parent-1')` is called
+THEN the result has `success: true`
+AND the built node is appended to the parent node's children
+
+#### TEST-TI-044: Scene builder orchestrator -- font preloading
+- **Status**: SPECIFIED
+- **Type**: unit (with Figma mock)
+- **Priority**: medium
+- **File**: `packages/figma-plugin/src/scene-builder/__tests__/scene-builder.test.ts`
+
+GIVEN the Figma global mock is installed with `loadFontAsync` as a spy
+WHEN `buildScene` is called with a spec containing a TEXT node with fontFamily 'Roboto'
+THEN `figma.loadFontAsync` is called with `{ family: 'Roboto', style: 'Regular' }` (or equivalent)
+AND the TEXT node's characters are set correctly
 
 ---
 
@@ -532,10 +690,13 @@ AND exits
 
 After each phase, the full test suite must pass:
 
-1. All existing tests in `packages/shared/src/__tests__/` (colors, fonts, warnings)
-2. All existing tests in `packages/mcp-server/src/__tests__/schemas.test.ts`
-3. All existing tests in `packages/mcp-server/src/__tests__/server.test.ts` (after fixing tool counts)
-4. The existing `ws-server.test.ts` tests (may need port adjustment to avoid relay conflicts)
-5. All new relay tests
-6. `npm run build` succeeds (TypeScript compilation)
-7. `npm run lint` passes
+1. All existing tests in `packages/shared/src/__tests__/` (colors, fonts, warnings) -- 26 tests
+2. All existing tests in `packages/mcp-server/src/__tests__/schemas.test.ts` -- 40 tests
+3. All existing tests in `packages/mcp-server/src/__tests__/server.test.ts` -- 17 tests
+4. All existing tests in `packages/mcp-server/src/__tests__/ws-server.test.ts` -- 9 tests
+5. All existing tests in `packages/mcp-server/src/__tests__/relay.test.ts` -- 22 tests
+6. All existing tests in `packages/mcp-server/src/__tests__/relay-detached.test.ts` -- 7 tests
+7. All existing tests in `packages/figma-plugin/src/scene-builder/build-node.test.ts` -- 9 tests
+8. All new Phase 4 tests (protocol-contract, handler-utils, tool-execution, scene-builder orchestrator)
+9. `npm run build` succeeds (TypeScript compilation)
+10. `npm run lint` passes

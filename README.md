@@ -611,6 +611,9 @@ npm run dev
 # Run tests
 npm test
 
+# Run tests with coverage report
+npm run test:coverage
+
 # Lint
 npm run lint
 
