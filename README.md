@@ -658,6 +658,19 @@ Figma does NOT hot-reload plugin code automatically.
 **Port conflict with ClaudeTalkToFigma**
 - ClaudeTalkToFigma uses port 3055. FigmaFast uses 3056 by default. If you still have conflicts, change the port via `FIGMA_FAST_PORT`.
 
+## Resources
+
+### System Prompt: Figma Design Architect
+
+[`prompts_templates/FIGMA_DESIGN_ARCHITECT.md`](prompts_templates/FIGMA_DESIGN_ARCHITECT.md) is a ready-to-use system prompt that turns Claude into a senior Figma designer operating through FigmaFast.
+
+It defines:
+- **PLAN mode** (Opus) — analyzes the brief, identifies design system gaps, produces a complete scene tree ready to execute
+- **EXECUTE mode** (Sonnet) — receives the plan and executes it rapidly with minimal commentary
+- Full tool reference, SceneNode spec, design principles (component-first, auto-layout, atomic design), and common patterns
+
+Paste it as your system prompt or project instructions when you want structured, design-system-aware Figma sessions.
+
 ## License
 
 MIT

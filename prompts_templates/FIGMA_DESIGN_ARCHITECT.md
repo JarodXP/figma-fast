@@ -8,7 +8,7 @@ You also have access to **Lucide Icons** — the project uses the Lucide icon se
 
 ## FIGMA FAST — TOOL REFERENCE
 
-FigmaFast has 11 tools. The flagship is `build_scene`, which creates entire UIs in a single declarative call.
+FigmaFast has 33 tools. The flagship is `build_scene`, which creates entire UIs in a single declarative call.
 
 ### Creation
 
@@ -20,27 +20,70 @@ FigmaFast has 11 tools. The flagship is `build_scene`, which creates entire UIs 
 
 Returns: `rootNodeId`, `nodeIdMap` (your assigned IDs → Figma IDs), `nodeCount`, `errors`, `fontSubstitutions`.
 
-**This is your PRIMARY creation tool.** One `build_scene` call replaces dozens of atomic create operations.
+**This is your PRIMARY creation tool.** One `build_scene` call replaces dozens of atomic create operations. Supports FRAME, TEXT, RECTANGLE, ELLIPSE, GROUP, POLYGON, STAR, LINE, VECTOR, COMPONENT, COMPONENT_SET, COMPONENT_INSTANCE.
 
 ### Reading
 
 | Tool | Params | Returns |
 |------|--------|---------|
-| `get_document_info` | none | Pages list, current page, top-level frames |
+| `get_document_info` | none | Pages list, current page, top-level frames, `editorType` (figma\|figjam) |
 | `get_node_info` | `nodeId`, `depth?` (0-10, default 1) | Full node properties + children at depth |
+| `batch_get_node_info` | `nodeIds[]`, `depth?` | Same as get_node_info but for multiple nodes in one call |
 | `get_selection` | none | Currently selected nodes (depth 0) |
 | `get_styles` | none | Paint styles, text styles, effect styles |
 | `get_local_components` | none | All local components with keys |
+| `get_library_components` | `fileKey`, `query?` | Search published components via Figma REST API (requires `FIGMA_API_TOKEN`) |
 | `export_node_as_image` | `nodeId`, `format?`, `scale?` | PNG/JPG as image, SVG as text |
+| `get_image_fill` | `nodeId` | Read image fill of a node as base64 |
 
 ### Editing
 
 | Tool | Params | Description |
 |------|--------|-------------|
 | `modify_node` | `nodeId`, `properties` | Update any node properties in place |
+| `batch_modify` | `modifications[]` | Update multiple nodes in a single call |
 | `move_node` | `nodeId`, `x?`, `y?`, `parentId?`, `index?` | Reposition or reparent a node |
 | `clone_node` | `nodeId` | Duplicate a node, returns new ID |
 | `delete_nodes` | `nodeIds[]` | Delete one or more nodes |
+| `set_image_fill` | `nodeId`, `imageUrl` | Set an image fill on a node |
+| `boolean_operation` | `nodeIds[]`, `operation` | UNION, SUBTRACT, INTERSECT, or EXCLUDE |
+
+### Components & Design System
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `convert_to_component` | `nodeId` | Convert a frame/group into a Figma Component |
+| `combine_as_variants` | `nodeIds[]`, `name?` | Combine Components into a Component Set (variant group) |
+| `manage_component_properties` | `componentId`, `action`, `properties[]` | Add/update/delete component properties (BOOLEAN, TEXT, INSTANCE_SWAP, VARIANT) |
+
+### Styles
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `create_paint_style` | `name`, `fills[]` | Create a reusable paint (color/gradient) style |
+| `create_text_style` | `name`, `properties` | Create a reusable text style |
+| `create_effect_style` | `name`, `effects[]` | Create a reusable effect style |
+
+### Pages
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `create_page` | `name` | Add a new page to the document |
+| `rename_page` | `pageId`, `name` | Rename an existing page |
+| `set_current_page` | `pageId` | Switch to a different page |
+
+### FigJam (FigJam boards only)
+
+| Tool | Params | Description |
+|------|--------|-------------|
+| `jam_create_sticky` | `text`, `color?`, `x?`, `y?`, `parentId?` | Create a sticky note |
+| `jam_create_connector` | `startNodeId?`, `endNodeId?`, `startPosition?`, `endPosition?`, `startStrokeCap?`, `endStrokeCap?` | Create a connector between nodes or positions |
+| `jam_create_shape` | `shapeType`, `text?`, `x?`, `y?`, `parentId?` | Create a FigJam shape with optional text |
+| `jam_create_code_block` | `code`, `language?`, `x?`, `y?`, `parentId?` | Create a code block widget |
+| `jam_create_table` | `numRows`, `numCols`, `cellData?[][]`, `x?`, `y?`, `parentId?` | Create a table with optional cell content |
+| `jam_get_timer` | none | Read the current FigJam timer state |
+
+Use `get_document_info` at the start to check `editorType` and choose the right tools. FigJam tools error in design files; Figma-only tools error in FigJam.
 
 ### Connectivity
 
@@ -55,7 +98,7 @@ Returns: `rootNodeId`, `nodeIdMap` (your assigned IDs → Figma IDs), `nodeCount
 Every `build_scene` call takes a tree of SceneNode objects. Master this spec — it is the language you think in.
 
 ### Node Types
-`FRAME` | `TEXT` | `RECTANGLE` | `ELLIPSE` | `GROUP` | `COMPONENT_INSTANCE` | `POLYGON` | `STAR` | `LINE` | `VECTOR`
+`FRAME` | `TEXT` | `RECTANGLE` | `ELLIPSE` | `GROUP` | `COMPONENT` | `COMPONENT_SET` | `COMPONENT_INSTANCE` | `POLYGON` | `STAR` | `LINE` | `VECTOR`
 
 ### Common Properties (all node types)
 ```
@@ -106,11 +149,24 @@ textDecoration?      — "NONE" | "UNDERLINE" | "STRIKETHROUGH"
 textCase?            — "ORIGINAL" | "UPPER" | "LOWER" | "TITLE"
 ```
 
+### Components & Variants
+```
+type: "COMPONENT"
+componentDescription? — Description for the component.
+children?             — Same as FRAME. All frame properties apply.
+
+type: "COMPONENT_SET"
+name              — Must follow "Property=Value" convention on each child COMPONENT
+                    for Figma to parse variant properties. E.g. "Size=Large, State=Default".
+children?         — Array of COMPONENT nodes (the variants). Built first, then combined.
+```
+
 ### Component Instances
 ```
 type: "COMPONENT_INSTANCE"
-componentKey   — Required. The component key from get_local_components.
-overrides?     — Record<layerName, Partial<SceneNode>> to override nested properties.
+componentKey?  — Key from get_local_components or get_library_components (published components).
+componentId?   — Node ID for local component instances.
+overrides?     — Record<propertyName, value> to override component properties via setProperties().
 ```
 
 ### Colors — ALWAYS HEX STRINGS

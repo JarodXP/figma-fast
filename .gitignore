@@ -24,3 +24,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Internal planning & process docs (not for public consumption)
+internal/
