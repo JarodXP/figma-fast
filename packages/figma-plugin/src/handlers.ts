@@ -42,6 +42,7 @@ export async function handleGetDocumentInfo(): Promise<unknown> {
 
   return {
     name: figma.root.name,
+    fileKey: figma.fileKey,
     editorType: (figma as any).editorType,
     currentPageId: currentPage.id,
     currentPageName: currentPage.name,

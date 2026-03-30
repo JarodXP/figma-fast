@@ -3,7 +3,9 @@ node_modules/
 
 # Build artifacts
 dist/
+dist-ext/
 *.tsbuildinfo
+*.mcpb
 
 # Environment / secrets
 .env

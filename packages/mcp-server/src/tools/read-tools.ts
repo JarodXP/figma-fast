@@ -58,6 +58,103 @@ export function registerReadTools(server: McpServer): void {
     },
   );
 
+  // ─── get_comments ────────────────────────────────────────────
+
+  server.tool(
+    'get_comments',
+    'Get comments on the current Figma file via the Figma REST API. Requires FIGMA_TOKEN environment variable (a Figma Personal Access Token). Optionally filter by resolved status.',
+    {
+      fileKey: z
+        .string()
+        .optional()
+        .describe('Figma file key (e.g. "ABC123XYZ"). If omitted, read from the connected plugin automatically.'),
+      resolved: z
+        .boolean()
+        .optional()
+        .describe('Filter comments: true = resolved only, false = unresolved only. Omit to return all.'),
+    },
+    async (params) => {
+      const token = process.env.FIGMA_TOKEN;
+      if (!token) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'FIGMA_TOKEN environment variable is not set. Add your Figma Personal Access Token to the MCP server config.',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      // Resolve file key: use param if provided, otherwise ask the plugin
+      let fileKey = params.fileKey;
+      if (!fileKey) {
+        if (!isPluginConnected()) return NOT_CONNECTED;
+        try {
+          const docResponse = await sendToPlugin({ type: 'get_document_info' }, TIMEOUT);
+          if (docResponse.type === 'result' && docResponse.success) {
+            fileKey = (docResponse.data as { fileKey?: string }).fileKey;
+          }
+        } catch {
+          // fall through to missing-key error
+        }
+        if (!fileKey) {
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'Could not determine file key. Pass fileKey explicitly or ensure the FigmaFast plugin is connected.',
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+
+      try {
+        const url = `https://api.figma.com/v1/files/${fileKey}/comments`;
+        const res = await fetch(url, { headers: { 'X-Figma-Token': token } });
+
+        if (!res.ok) {
+          const body = await res.text();
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Figma API error ${res.status}: ${body}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const json = (await res.json()) as { comments: unknown[] };
+        let comments = json.comments ?? [];
+
+        if (params.resolved === true) {
+          comments = comments.filter((c: any) => c.resolved_at != null);
+        } else if (params.resolved === false) {
+          comments = comments.filter((c: any) => c.resolved_at == null);
+        }
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(comments, null, 2) }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `get_comments failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // ─── get_node_info ───────────────────────────────────────────
 
   server.tool(

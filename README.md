@@ -28,7 +28,8 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 
 | Tool | Purpose |
 |------|---------|
-| `get_document_info` | List pages, current page, top-level frames |
+| `get_document_info` | List pages, current page, top-level frames, and file key |
+| `get_comments` | Read comments on the current file via the Figma REST API (requires `FIGMA_TOKEN`) |
 | `get_node_info` | Read all properties of a node by ID |
 | `batch_get_node_info` | Read multiple nodes in one call (reduces round-trips) |
 | `get_selection` | Get currently selected nodes |
@@ -96,35 +97,54 @@ FigmaFast's `build_scene` tool takes a **declarative scene tree** and creates ev
 |------|---------|
 | `ping` | Health check — verify plugin connection |
 
-## Quick Start
+## Installation
 
-### Prerequisites
+### Option A — Claude Desktop Extension (easiest)
+
+1. Download **[figma-fast.mcpb](https://github.com/JarodXP/figma-fast/releases/latest/download/figma-fast.mcpb)** from the latest release
+2. Double-click the file — Claude Desktop installs it automatically
+3. Restart Claude Desktop
+
+No terminal, no JSON editing, no Node.js required.
+
+### Option B — Claude Code (one command)
+
+```bash
+claude mcp add figma-fast -- npx -y @figma-fast/mcp-server
+```
+
+Or add manually to your `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "figma-fast": {
+      "command": "npx",
+      "args": ["-y", "@figma-fast/mcp-server"],
+      "env": { "MCP_CLIENT_NAME": "Claude Code" }
+    }
+  }
+}
+```
+
+### Option C — Manual / from source
+
+<details>
+<summary>Build from source</summary>
+
+#### Prerequisites
 
 - **Node.js** >= 18
 - **Figma Desktop** (or Figma in the browser)
 
-### 1. Clone and build
-
 ```bash
-git clone <repo-url> figma-fast
+git clone https://github.com/JarodXP/figma-fast
 cd figma-fast
 npm install
 npm run build
 ```
 
-### 2. Load the Figma plugin
-
-1. Open Figma and open any file
-2. Go to **Menu > Plugins > Development > Import plugin from manifest...**
-3. Select `packages/figma-plugin/manifest.json`
-4. Run the plugin: **Menu > Plugins > Development > FigmaFast**
-5. The plugin panel appears with a connection status dot (yellow = connecting, green = connected)
-
-### 3. Configure your AI client
-
-#### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+Then add to your AI client config:
 
 ```json
 {
@@ -138,27 +158,32 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 }
 ```
 
-#### Claude Code
+Config file locations:
+- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Claude Desktop (Windows):** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Claude Code:** `.mcp.json` in your project root
 
-Add to `.mcp.json` in your project root:
+</details>
 
-```json
-{
-  "mcpServers": {
-    "figma-fast": {
-      "command": "node",
-      "args": ["/absolute/path/to/figma-fast/packages/mcp-server/dist/index.js"],
-      "env": { "MCP_CLIENT_NAME": "Claude Code" }
-    }
-  }
-}
-```
+---
+
+## Quick Start
+
+### 1. Load the Figma plugin
+
+1. Open Figma and open any file
+2. Go to **Menu > Plugins > Development > Import plugin from manifest...**
+3. Select `packages/figma-plugin/manifest.json`
+4. Run the plugin: **Menu > Plugins > Development > FigmaFast**
+5. The plugin panel appears with a connection status dot (yellow = connecting, green = connected)
+
+> **Note:** The Figma plugin must always be loaded manually from source — it is not yet available in the Figma Community marketplace.
+
+### 2. Verify
+
+Ask Claude: *"Ping the Figma plugin"* — you should get a `pong` response with round-trip time.
 
 `MCP_CLIENT_NAME` is optional but recommended when running multiple clients — it labels each client in the plugin's connection picker.
-
-### 4. Verify
-
-Ask Claude: *"Ping the Figma plugin"* -- you should get a `pong` response with round-trip time.
 
 ### Using multiple AI clients simultaneously
 
