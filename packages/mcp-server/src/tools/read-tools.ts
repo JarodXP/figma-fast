@@ -92,9 +92,9 @@ export function registerReadTools(server: McpServer): void {
       if (!fileKey) {
         if (!isPluginConnected()) return NOT_CONNECTED;
         try {
-          const docResponse = await sendToPlugin({ type: 'get_document_info' }, TIMEOUT);
-          if (docResponse.type === 'result' && docResponse.success) {
-            fileKey = (docResponse.data as { fileKey?: string }).fileKey;
+          const keyResponse = await sendToPlugin({ type: 'get_file_key' }, TIMEOUT);
+          if (keyResponse.type === 'result' && keyResponse.success) {
+            fileKey = (keyResponse.data as { fileKey?: string }).fileKey;
           }
         } catch {
           // fall through to missing-key error

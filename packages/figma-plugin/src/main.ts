@@ -14,6 +14,7 @@ import {
   handleJamGetTimer,
 } from './figjam-handlers.js';
 import {
+  handleGetFileKey,
   handleGetDocumentInfo,
   handleGetNodeInfo,
   handleGetSelection,
@@ -83,6 +84,10 @@ figma.ui.onmessage = (msg: { type: string; id: string; [key: string]: unknown })
       break;
 
     // ─── Read Tools ──────────────────────────────────────────
+
+    case 'get_file_key':
+      sendResult(msg.id, handleGetFileKey());
+      break;
 
     case 'get_document_info':
       handleGetDocumentInfo()

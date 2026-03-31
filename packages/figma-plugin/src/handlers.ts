@@ -26,6 +26,10 @@ function requireFigmaDesign(toolName: string): void {
 
 // ─── Read Handlers ─────────────────────────────────────────────
 
+export function handleGetFileKey(): { fileKey: string | null } {
+  return { fileKey: figma.fileKey };
+}
+
 export async function handleGetDocumentInfo(): Promise<unknown> {
   const pages = figma.root.children.map((page) => ({
     id: page.id,

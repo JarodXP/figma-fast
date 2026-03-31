@@ -33,6 +33,7 @@ export type ServerToPluginMessage =
   | { type: 'batch_modify'; id: string; modifications: Modification[] }
   | { type: 'read_node'; id: string; nodeId: string; depth?: number }
   | { type: 'get_document_info'; id: string }
+  | { type: 'get_file_key'; id: string }
   | { type: 'get_node_info'; id: string; nodeId: string; depth?: number }
   | { type: 'get_selection'; id: string }
   | { type: 'get_styles'; id: string }
