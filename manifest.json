@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "figma-fast",
   "display_name": "Figma Fast",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "High-performance MCP bridge to Figma — read, edit, and build designs directly from Claude.",
   "author": {
     "name": "Jarod"
